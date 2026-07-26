@@ -1,0 +1,161 @@
+/*
+ * Bundled typefaces for the conversation picker.
+ *
+ * Declared by hand rather than by importing each package's own stylesheet,
+ * which advertises a legacy `.woff` alongside every `.woff2`. Vite emits both,
+ * and the `.woff` copies came to 604 kB — more than the woff2 they back up.
+ * They are also unreachable: this app's CSS uses `light-dark()`, so any browser
+ * old enough to need woff could never render the UI in the first place.
+ *
+ * Latin subset, weights 400 and 700 — body copy and its bold. Everything here
+ * is SIL Open Font License 1.1; see src/fonts.ts for which picker entries these
+ * back and why four of them are substitutes.
+ *
+ * `font-display: swap` matches what Fontsource ships: text paints immediately
+ * in the fallback and reflows when the face arrives, which beats a blank
+ * transcript on a cold load.
+ */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/inter/files/inter-latin-400-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("@fontsource/inter/files/inter-latin-700-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/montserrat/files/montserrat-latin-400-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("@fontsource/montserrat/files/montserrat-latin-700-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Arimo";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/arimo/files/arimo-latin-400-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Arimo";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("@fontsource/arimo/files/arimo-latin-700-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Nunito Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/nunito-sans/files/nunito-sans-latin-400-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Nunito Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("@fontsource/nunito-sans/files/nunito-sans-latin-700-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "EB Garamond";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/eb-garamond/files/eb-garamond-latin-400-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "EB Garamond";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("@fontsource/eb-garamond/files/eb-garamond-latin-700-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Gelasio";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/gelasio/files/gelasio-latin-400-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Gelasio";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("@fontsource/gelasio/files/gelasio-latin-700-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Bitter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/bitter/files/bitter-latin-400-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Bitter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("@fontsource/bitter/files/bitter-latin-700-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "OpenDyslexic";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/opendyslexic/files/opendyslexic-latin-400-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "OpenDyslexic";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("@fontsource/opendyslexic/files/opendyslexic-latin-700-normal.woff2")
+    format("woff2");
+}

@@ -41,6 +41,11 @@ export const NON_DISPLAYED_SYSTEM_SUBTYPES: readonly string[] = [
   // runs a background task, e.g. a long bash command.
   "background_tasks_changed",
   "task_started",
+  // Fire-and-forget push of the full slash-command list when it changes
+  // mid-session (e.g. a skill discovered as the agent moves into a
+  // subdirectory). Carries a whole command array, so leaving it unlisted dumps
+  // the entire catalogue into the transcript as JSON.
+  "commands_changed",
 ];
 
 const NON_DISPLAYED_SYSTEM_SUBTYPE_SET: ReadonlySet<string> = new Set(

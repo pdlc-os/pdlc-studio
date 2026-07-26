@@ -9,6 +9,7 @@ export const API_CONFIG = {
     DIRECTORIES: "/api/directories",
     CREATE_PROJECT: "/api/projects/create",
     CLONE_REPOSITORY: "/api/projects/clone",
+    COMMANDS: "/api/commands",
   },
 } as const;
 
@@ -63,4 +64,14 @@ export const getCreateProjectUrl = () => {
 // Helper function to clone a git repository
 export const getCloneRepositoryUrl = () => {
   return API_CONFIG.ENDPOINTS.CLONE_REPOSITORY;
+};
+
+// Helper function to list slash commands available in a working directory.
+// The directory matters: project-local commands and skills are resolved
+// relative to it, so the same installation can offer different lists.
+export const getCommandsUrl = (workingDirectory?: string) => {
+  if (!workingDirectory) {
+    return API_CONFIG.ENDPOINTS.COMMANDS;
+  }
+  return `${API_CONFIG.ENDPOINTS.COMMANDS}?workingDirectory=${encodeURIComponent(workingDirectory)}`;
 };

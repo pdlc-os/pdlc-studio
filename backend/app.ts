@@ -21,6 +21,7 @@ import {
 import { handleHistoriesRequest } from "./handlers/histories.ts";
 import { handleConversationRequest } from "./handlers/conversations.ts";
 import { handleChatRequest } from "./handlers/chat.ts";
+import { handleCommandsRequest } from "./handlers/commands.ts";
 import { handleAbortRequest } from "./handlers/abort.ts";
 import { logger } from "./utils/logger.ts";
 import { readBinaryFile } from "./utils/fs.ts";
@@ -83,6 +84,9 @@ export function createApp(
   );
 
   app.post("/api/chat", (c) => handleChatRequest(c, requestAbortControllers));
+
+  // Slash commands available to the composer's "/" picker.
+  app.get("/api/commands", (c) => handleCommandsRequest(c));
 
   // Static file serving with SPA fallback
   const serveStatic = runtime.createStaticFileMiddleware({

@@ -1,13 +1,13 @@
-import type { AppSettings, Theme, EnterBehavior } from "../types/settings";
-import { CURRENT_SETTINGS_VERSION } from "../types/settings";
+import type { AppSettings, Theme } from "../types/settings";
+import { DEFAULT_SETTINGS, CURRENT_SETTINGS_VERSION } from "../types/settings";
 
 export const STORAGE_KEYS = {
-  // Unified settings key
+  // Unified settings for the app shell.
   SETTINGS: "pdlc-studio-settings",
-  // Legacy keys for migration
-  THEME: "pdlc-studio-theme",
-  ENTER_BEHAVIOR: "pdlc-studio-enter-behavior",
-  PERMISSION_MODE: "pdlc-studio-permission-mode",
+  // The demo route persists its own theme. Deliberately a separate key: it is
+  // written on every demo theme change, and sharing a key with SETTINGS let a
+  // demo visit decide the real app's theme on a fresh profile.
+  DEMO_THEME: "pdlc-studio-demo-theme",
 } as const;
 
 // Type-safe storage utilities
@@ -38,52 +38,36 @@ export function removeStorageItem(key: string): void {
 
 // Settings-specific utilities
 export function getSettings(): AppSettings {
-  // Try to load unified settings first
-  const unifiedSettings = getStorageItem<AppSettings | null>(
+  const stored = getStorageItem<AppSettings | null>(
     STORAGE_KEYS.SETTINGS,
     null,
   );
 
-  if (unifiedSettings && unifiedSettings.version === CURRENT_SETTINGS_VERSION) {
-    return unifiedSettings;
+  if (stored && stored.version === CURRENT_SETTINGS_VERSION) {
+    // Layered over defaults rather than returned as-is: a build that adds a
+    // setting would otherwise read `undefined` from every profile written
+    // before that setting existed. Adding a field is then a non-event, and
+    // only a change to an existing field's meaning needs a version bump.
+    return { ...createDefaultSettings(), ...stored };
   }
 
-  // If no unified settings or outdated version, migrate from legacy format
-  return migrateLegacySettings();
+  // Nothing usable stored — either a first run, or a settings version this
+  // build no longer understands. Seed defaults and persist them so the next
+  // read is a straight hit.
+  const settings = createDefaultSettings();
+  setSettings(settings);
+  return settings;
 }
 
 export function setSettings(settings: AppSettings): void {
   setStorageItem(STORAGE_KEYS.SETTINGS, settings);
 }
 
-function migrateLegacySettings(): AppSettings {
-  // Get system theme preference
+function createDefaultSettings(): AppSettings {
+  // Theme follows the OS preference rather than DEFAULT_SETTINGS.theme, so a
+  // first-time visitor in dark mode is not flashed a light UI.
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const systemDefaultTheme: Theme = prefersDark ? "dark" : "light";
+  const theme: Theme = prefersDark ? "dark" : "light";
 
-  // Load legacy settings
-  const legacyTheme = getStorageItem<Theme>(
-    STORAGE_KEYS.THEME,
-    systemDefaultTheme,
-  );
-  const legacyEnterBehavior = getStorageItem<EnterBehavior>(
-    STORAGE_KEYS.ENTER_BEHAVIOR,
-    "send",
-  );
-
-  // Create migrated settings
-  const migratedSettings: AppSettings = {
-    theme: legacyTheme,
-    enterBehavior: legacyEnterBehavior,
-    version: CURRENT_SETTINGS_VERSION,
-  };
-
-  // Save migrated settings
-  setSettings(migratedSettings);
-
-  // Clean up legacy storage keys
-  removeStorageItem(STORAGE_KEYS.THEME);
-  removeStorageItem(STORAGE_KEYS.ENTER_BEHAVIOR);
-
-  return migratedSettings;
+  return { ...DEFAULT_SETTINGS, theme };
 }

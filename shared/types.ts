@@ -104,3 +104,26 @@ export interface CloneRepositoryRequest {
 export interface ProjectPathResponse {
   path: string;
 }
+
+/**
+ * One entry in the composer's `/` picker.
+ *
+ * Mirrors the SDK's `SlashCommand`, deliberately re-declared rather than
+ * re-exported: `shared/` is imported by the frontend, which must not depend on
+ * the SDK's type surface just to render a list.
+ */
+export interface SlashCommandInfo {
+  /** Command name without the leading slash, e.g. "review" or "plugin:skill". */
+  name: string;
+  /** One-line summary shown next to the name. */
+  description: string;
+  /** Argument hint such as "<file>"; empty when the command takes none. */
+  argumentHint: string;
+  /** Alternate names resolving to this command (e.g. /cost -> /usage). */
+  aliases?: string[];
+}
+
+/** Response of `GET /api/commands`. */
+export interface SlashCommandsResponse {
+  commands: SlashCommandInfo[];
+}
