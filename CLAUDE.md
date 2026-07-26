@@ -440,6 +440,18 @@ executable this app never runs, because `chat.ts` passes an explicit
 `pathToClaudeCodeExecutable`. macOS arm64 went from 428 MB to 94 MB, and to
 38 MB once packaged as a compressed disk image.
 
+**Every platform ships compressed.** macOS as a UDZO disk image, Linux as a
+`.tar.gz` holding a single executable named `pdlc-studio`. The packaging step
+deletes the unpackaged binary afterwards, so each platform has exactly one
+obvious download. Linux went from 145 MB raw to 41 MB; it had been shipping
+uncompressed only because the DMG gave macOS compression for free and nothing
+did the equivalent for Linux.
+
+`.tar.gz` rather than `.tar.xz` on purpose: xz reaches 29 MB but needs
+`xz-utils` present to extract, and a failed extract on a minimal image costs
+more than 12 MB saves. Switching is a one-word change (`-czf` to `-cJf`) if that
+tradeoff ever flips.
+
 `--no-check` is required because dropping devDependencies removes
 `@types/node`, which a JSR dependency needs to resolve types. Types are already
 checked by `make check` on every PR.

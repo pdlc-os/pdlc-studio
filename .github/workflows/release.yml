@@ -195,6 +195,19 @@ jobs:
           # Ship the image only, so there is one obvious macOS download.
           rm "dist/${{ matrix.artifact_name }}"
 
+      - name: Package Linux tarball
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          STAGING="$RUNNER_TEMP/tar"
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING"
+          cp "dist/${{ matrix.artifact_name }}" "$STAGING/pdlc-studio"
+          chmod +x "$STAGING/pdlc-studio"
+          tar -czf "dist/${{ matrix.artifact_name }}.tar.gz" -C "$STAGING" pdlc-studio
+          # Ship the archive only, so there is one obvious download per platform.
+          rm "dist/${{ matrix.artifact_name }}"
+
       - name: Report artifact size
         run: ls -lh dist/
 
