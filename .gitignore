@@ -9,4 +9,7 @@ backend/dist/
 frontend/demo-recordings/
 frontend/test-results/
 frontend/playwright-report/
+
+# Playwright MCP scratch output (see the MCP Integration section in CLAUDE.md)
+.playwright-mcp/
 frontend/playwright/.cache/

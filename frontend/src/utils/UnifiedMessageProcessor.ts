@@ -37,6 +37,10 @@ export const NON_DISPLAYED_SYSTEM_SUBTYPES: readonly string[] = [
   "hook_progress",
   "hook_response",
   "thinking_tokens",
+  // Observed in live sessions after the five above: emitted whenever Claude
+  // runs a background task, e.g. a long bash command.
+  "background_tasks_changed",
+  "task_started",
 ];
 
 const NON_DISPLAYED_SYSTEM_SUBTYPE_SET: ReadonlySet<string> = new Set(

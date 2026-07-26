@@ -250,8 +250,21 @@ dedicated rendering for.
 into the transcript, `NON_DISPLAYED_SYSTEM_SUBTYPES` in
 `frontend/src/utils/UnifiedMessageProcessor.ts` keeps the purely-internal
 subtypes out of the UI (`init`, `hook_started`, `hook_progress`,
-`hook_response`, `thinking_tokens`). It is a **blocklist**, so a future SDK
-version can add a noisy subtype that shows up until it is listed there.
+`hook_response`, `thinking_tokens`, `background_tasks_changed`,
+`task_started`).
+
+It is a **blocklist**, so a future SDK version can add a noisy subtype that
+shows up until it is listed there — `background_tasks_changed` and
+`task_started` were found exactly that way, by watching a live session rather
+than by reading the types. If this keeps happening, invert it to an allowlist of
+the subtypes the UI actually renders. The parameterised test in
+`useClaudeStreaming.test.ts` iterates the exported list, so adding a subtype
+there gets coverage for free.
+
+Note `rate_limit_event` arrives on nearly every request as a **top-level**
+message type (not a `system` subtype), so it lands in `useStreamParser`'s
+unknown-type branch and logs to the browser console once per request. Harmless,
+but that is where the noise comes from.
 
 `init` is filtered from **display only**. It must still be processed, because
 `setHasReceivedInit(true)` is what allows `session_id` to be picked up from
