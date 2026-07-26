@@ -457,7 +457,7 @@ export function ChatPage() {
            * would make the click target and its accessible name inconsistent
            * with the other crumbs.
            */}
-          <AppIcon size={22} />
+          <AppIcon size={28} variant="mark" />
           <VStack gap={1}>
             <Breadcrumbs label="Breadcrumb">
               <BreadcrumbItem onClick={handleBackToProjects}>

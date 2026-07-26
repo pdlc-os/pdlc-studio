@@ -1,6 +1,6 @@
 # PDLC Studio - Development Tasks
 
-.PHONY: format format-check lint typecheck test build dev clean install install-frontend install-backend
+.PHONY: format format-check lint typecheck test build dev clean install install-frontend install-backend sync-brand
 
 # Formatting
 format: format-frontend format-backend
@@ -64,6 +64,14 @@ install-frontend:
 	cd frontend && npm ci
 install-backend:
 	cd backend && npm ci
+
+# Copy the canonical mark from brand/ into the places that serve it.
+# AppIcon.test.tsx fails if these drift, so a forgotten sync is caught by
+# `make check` rather than in review.
+sync-brand:
+	cp brand/pdlc-studio-mark.svg frontend/public/pdlc-studio-mark.svg
+	cp brand/pdlc-studio-mark-small.svg frontend/public/pdlc-studio-favicon.svg
+	@echo "Synced brand/ -> frontend/public/"
 
 # Format specific files (usage: make format-files FILES="file1 file2")
 format-files:

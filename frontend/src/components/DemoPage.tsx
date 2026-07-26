@@ -368,7 +368,7 @@ export function DemoPage() {
         <HStack justify="between" vAlign="center" gap={4}>
           <VStack gap={1}>
             <HStack gap={2} vAlign="center">
-              <AppIcon size={24} />
+              <AppIcon size={28} variant="mark" />
               <Heading level={1}>PDLC Studio</Heading>
               {isDemo && <Badge label="Demo" variant="neutral" />}
             </HStack>
