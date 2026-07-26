@@ -89,8 +89,9 @@ The script installs the Claude CLI if it is missing and dotenvx if you want `.en
 
 ### Option 1 — Binary Release
 
-Self-contained builds are published for each release. macOS ships as a disk
-image; Linux ships as a bare executable.
+Self-contained builds are published for each release, compressed so the
+download stays around 40 MB rather than the ~140 MB the binary weighs on disk.
+macOS ships as a disk image, Linux as a tarball.
 
 #### macOS
 
@@ -117,12 +118,15 @@ xattr -d com.apple.quarantine ./pdlc-studio
 #### Linux
 
 ```bash
-curl -fsSLO https://github.com/pdlc-os/pdlc-studio/releases/latest/download/pdlc-studio-linux-x64
-chmod +x pdlc-studio-linux-x64
-./pdlc-studio-linux-x64
+curl -fsSLO https://github.com/pdlc-os/pdlc-studio/releases/latest/download/pdlc-studio-linux-x64.tar.gz
+tar -xzf pdlc-studio-linux-x64.tar.gz
+./pdlc-studio
 ```
 
-Use `pdlc-studio-linux-arm64` on ARM hardware.
+The archive contains a single executable named `pdlc-studio`, already marked
+executable — no `chmod` needed. Move it onto your `PATH` to keep it.
+
+Use `pdlc-studio-linux-arm64.tar.gz` on ARM hardware.
 
 Then open **http://localhost:8080**.
 
