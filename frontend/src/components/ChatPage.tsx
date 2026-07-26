@@ -29,6 +29,7 @@ import { HistoryButton } from "./chat/HistoryButton";
 import { ChatInput } from "./chat/ChatInput";
 import { ChatMessages } from "./chat/ChatMessages";
 import { HistoryView } from "./HistoryView";
+import { AppIcon } from "./AppIcon";
 import { getChatUrl, getProjectsUrl } from "../config/api";
 import { KEYBOARD_SHORTCUTS } from "../utils/constants";
 import { normalizeWindowsPath } from "../utils/pathUtils";
@@ -464,6 +465,13 @@ export function ChatPage() {
               icon={<Icon icon="chevronLeft" />}
             />
           )}
+          {/*
+           * The mark sits outside Breadcrumbs rather than inside the first
+           * item: BreadcrumbItem renders a link, and burying an image in it
+           * would make the click target and its accessible name inconsistent
+           * with the other crumbs.
+           */}
+          <AppIcon size={22} />
           <VStack gap={1}>
             <Breadcrumbs label="Breadcrumb">
               <BreadcrumbItem onClick={handleBackToProjects}>

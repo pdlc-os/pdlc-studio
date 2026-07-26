@@ -10,12 +10,7 @@ import { Icon } from "@astryxdesign/core/Icon";
 import { Button } from "@astryxdesign/core/Button";
 import { Spinner } from "@astryxdesign/core/Spinner";
 import { Banner } from "@astryxdesign/core/Banner";
-import {
-  FolderOpen,
-  FolderPlus,
-  GitBranch,
-  SquareTerminal,
-} from "lucide-react";
+import { FolderOpen, FolderPlus, GitBranch } from "lucide-react";
 import type { ProjectsResponse, ProjectInfo } from "../types";
 import { getProjectsUrl } from "../config/api";
 import { SettingsButton } from "./SettingsButton";
@@ -23,6 +18,7 @@ import { SettingsModal } from "./SettingsModal";
 import { DirectoryPickerDialog } from "./DirectoryPickerDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { CloneRepositoryDialog } from "./CloneRepositoryDialog";
+import { AppIcon } from "./AppIcon";
 
 /** Which modal is currently open. Only one can be at a time. */
 type ActiveDialog = "none" | "open" | "new" | "clone" | "settings";
@@ -82,8 +78,8 @@ export function ProjectSelector() {
         {/* Left: identity and actions */}
         <div className="launch-main">
           <VStack gap={3} hAlign="center">
-            <div className="launch-logo" aria-hidden="true">
-              <SquareTerminal size={44} strokeWidth={1.5} />
+            <div className="launch-logo">
+              <AppIcon size={88} />
             </div>
             <VStack gap={1} hAlign="center">
               <Heading level={1}>PDLC Studio</Heading>

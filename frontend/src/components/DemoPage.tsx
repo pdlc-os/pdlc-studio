@@ -17,6 +17,7 @@ import { useChatState } from "../hooks/chat/useChatState";
 import { usePermissions } from "../hooks/chat/usePermissions";
 import { useDemoAutomation } from "../hooks/useDemoAutomation";
 import { SettingsButton } from "./SettingsButton";
+import { AppIcon } from "./AppIcon";
 import { SettingsModal } from "./SettingsModal";
 import { ChatInput } from "./chat/ChatInput";
 import { ChatMessages } from "./chat/ChatMessages";
@@ -367,6 +368,7 @@ export function DemoPage() {
         <HStack justify="between" vAlign="center" gap={4}>
           <VStack gap={1}>
             <HStack gap={2} vAlign="center">
+              <AppIcon size={24} />
               <Heading level={1}>PDLC Studio</Heading>
               {isDemo && <Badge label="Demo" variant="neutral" />}
             </HStack>

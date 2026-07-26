@@ -1,6 +1,15 @@
+<!--
+  The mark carries its own tile background, so a single asset renders correctly
+  against GitHub's light and dark themes without a picture/prefers-color-scheme
+  swap.
+-->
+<img src="docs/images/icon.svg" alt="" width="96" height="96" align="left" hspace="20" />
+
 # PDLC Studio
 
 **A modern web interface for Claude Code CLI** — transform your command-line coding experience into an intuitive web-based chat interface.
+
+<br clear="left" />
 
 [![CI](https://github.com/pdlc-os/pdlc-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/pdlc-os/pdlc-studio/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/pdlc-os/pdlc-studio)](https://github.com/pdlc-os/pdlc-studio/releases)
