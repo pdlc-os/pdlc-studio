@@ -4,6 +4,11 @@ import { useStreamParser } from "./useStreamParser";
 import type { StreamingContext } from "./useMessageProcessor";
 import type { SDKMessage } from "../../types";
 import { generateId } from "../../utils/id";
+import {
+  makeAPIAssistantMessage,
+  makeTextBlock,
+  type APIContentBlock,
+} from "../../utils/sdkFixtures";
 
 // Mock dependencies
 
@@ -35,18 +40,16 @@ describe("useStreamParser", () => {
         session_id: "test-session",
         uuid: generateId(),
         parent_tool_use_id: null,
-        message: {
-          content: [
-            {
-              type: "tool_use",
-              id: "plan-123",
-              name: "ExitPlanMode",
-              input: {
-                plan: "Let's implement a new feature:\n\n1. Add UI component\n2. Connect to API\n3. Write tests",
-              },
+        message: makeAPIAssistantMessage([
+          {
+            type: "tool_use",
+            id: "plan-123",
+            name: "ExitPlanMode",
+            input: {
+              plan: "Let's implement a new feature:\n\n1. Add UI component\n2. Connect to API\n3. Write tests",
             },
-          ],
-        },
+          },
+        ]),
       };
 
       result.current.processStreamLine(
@@ -75,16 +78,14 @@ describe("useStreamParser", () => {
         session_id: "test-session",
         uuid: generateId(),
         parent_tool_use_id: null,
-        message: {
-          content: [
-            {
-              type: "tool_use",
-              id: "plan-456",
-              name: "ExitPlanMode",
-              input: {},
-            },
-          ],
-        },
+        message: makeAPIAssistantMessage([
+          {
+            type: "tool_use",
+            id: "plan-456",
+            name: "ExitPlanMode",
+            input: {},
+          },
+        ]),
       };
 
       result.current.processStreamLine(
@@ -113,16 +114,17 @@ describe("useStreamParser", () => {
         session_id: "test-session",
         uuid: generateId(),
         parent_tool_use_id: null,
-        message: {
-          content: [
-            {
-              type: "tool_use",
-              id: "plan-789",
-              name: "ExitPlanMode",
-              // input field is intentionally missing
-            },
-          ],
-        },
+        // Deliberately malformed: `input` is missing, which the SDK's types
+        // forbid. The cast is what lets this test exercise the parser's
+        // handling of a block the SDK says cannot happen.
+        message: makeAPIAssistantMessage([
+          {
+            type: "tool_use",
+            id: "plan-789",
+            name: "ExitPlanMode",
+            // input field is intentionally missing
+          } as unknown as APIContentBlock,
+        ]),
       };
 
       result.current.processStreamLine(
@@ -151,18 +153,19 @@ describe("useStreamParser", () => {
         session_id: "test-session",
         uuid: generateId(),
         parent_tool_use_id: null,
-        message: {
-          content: [
-            {
-              type: "tool_use",
-              // id field is intentionally missing
-              name: "ExitPlanMode",
-              input: {
-                plan: "Test plan content",
-              },
+        // Deliberately malformed: `id` is missing, which the SDK's types
+        // forbid. The cast is what lets this test exercise the parser's
+        // handling of a block the SDK says cannot happen.
+        message: makeAPIAssistantMessage([
+          {
+            type: "tool_use",
+            // id field is intentionally missing
+            name: "ExitPlanMode",
+            input: {
+              plan: "Test plan content",
             },
-          ],
-        },
+          } as unknown as APIContentBlock,
+        ]),
       };
 
       result.current.processStreamLine(
@@ -191,18 +194,16 @@ describe("useStreamParser", () => {
         session_id: "test-session",
         uuid: generateId(),
         parent_tool_use_id: null,
-        message: {
-          content: [
-            {
-              type: "tool_use",
-              id: "plan-invalid",
-              name: "ExitPlanMode",
-              input: {
-                plan: { invalid: "object" }, // Non-string content
-              },
+        message: makeAPIAssistantMessage([
+          {
+            type: "tool_use",
+            id: "plan-invalid",
+            name: "ExitPlanMode",
+            input: {
+              plan: { invalid: "object" }, // Non-string content
             },
-          ],
-        },
+          },
+        ]),
       };
 
       result.current.processStreamLine(
@@ -231,18 +232,16 @@ describe("useStreamParser", () => {
         session_id: "test-session",
         uuid: generateId(),
         parent_tool_use_id: null,
-        message: {
-          content: [
-            {
-              type: "tool_use",
-              id: "bash-123",
-              name: "Bash",
-              input: {
-                command: "ls -la",
-              },
+        message: makeAPIAssistantMessage([
+          {
+            type: "tool_use",
+            id: "bash-123",
+            name: "Bash",
+            input: {
+              command: "ls -la",
             },
-          ],
-        },
+          },
+        ]),
       };
 
       result.current.processStreamLine(
@@ -367,22 +366,17 @@ describe("useStreamParser", () => {
         session_id: "test-session",
         uuid: generateId(),
         parent_tool_use_id: null,
-        message: {
-          content: [
-            {
-              type: "text",
-              text: "I'll help you with that. Here's my plan:",
+        message: makeAPIAssistantMessage([
+          makeTextBlock("I'll help you with that. Here's my plan:"),
+          {
+            type: "tool_use",
+            id: "plan-mixed",
+            name: "ExitPlanMode",
+            input: {
+              plan: "1. Analyze requirements\n2. Design solution\n3. Implement",
             },
-            {
-              type: "tool_use",
-              id: "plan-mixed",
-              name: "ExitPlanMode",
-              input: {
-                plan: "1. Analyze requirements\n2. Design solution\n3. Implement",
-              },
-            },
-          ],
-        },
+          },
+        ]),
       };
 
       result.current.processStreamLine(
@@ -415,22 +409,20 @@ describe("useStreamParser", () => {
         session_id: "test-session",
         uuid: generateId(),
         parent_tool_use_id: null,
-        message: {
-          content: [
-            {
-              type: "tool_use",
-              id: "bash-123",
-              name: "Bash",
-              input: { command: "ls" },
-            },
-            {
-              type: "tool_use",
-              id: "plan-multi",
-              name: "ExitPlanMode",
-              input: { plan: "Multi-tool plan" },
-            },
-          ],
-        },
+        message: makeAPIAssistantMessage([
+          {
+            type: "tool_use",
+            id: "bash-123",
+            name: "Bash",
+            input: { command: "ls" },
+          },
+          {
+            type: "tool_use",
+            id: "plan-multi",
+            name: "ExitPlanMode",
+            input: { plan: "Multi-tool plan" },
+          },
+        ]),
       };
 
       result.current.processStreamLine(
@@ -473,16 +465,14 @@ describe("useStreamParser", () => {
         session_id: "session-with-plan",
         uuid: generateId(),
         parent_tool_use_id: null,
-        message: {
-          content: [
-            {
-              type: "tool_use",
-              id: "plan-session",
-              name: "ExitPlanMode",
-              input: { plan: "Plan with session tracking" },
-            },
-          ],
-        },
+        message: makeAPIAssistantMessage([
+          {
+            type: "tool_use",
+            id: "plan-session",
+            name: "ExitPlanMode",
+            input: { plan: "Plan with session tracking" },
+          },
+        ]),
       };
 
       result.current.processStreamLine(

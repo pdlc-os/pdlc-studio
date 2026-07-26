@@ -1,6 +1,12 @@
-import type { SDKMessage } from "@anthropic-ai/claude-code";
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { generateToolPattern } from "./toolUtils";
 import { generateId } from "./id";
+import {
+  makeResultUsage,
+  makeSystemInitMessage,
+  makeTextBlock,
+  makeUsage,
+} from "./sdkFixtures";
 
 export interface MockStreamResponse {
   type: "claude_json" | "done" | "error";
@@ -39,20 +45,13 @@ export type MockScenarioStep =
 export function createSystemMessage(
   sessionId: string,
 ): Extract<SDKMessage, { type: "system" }> {
-  return {
-    type: "system",
-    subtype: "init",
-    apiKeySource: "user",
+  return makeSystemInitMessage({
     cwd: "/Users/demo/pdlc-studio",
     session_id: sessionId,
     uuid: generateId(),
     tools: ["Read", "Write", "Edit", "Bash"],
-    mcp_servers: [],
     model: "claude-3-5-sonnet-20241022",
-    permissionMode: "default",
-    slash_commands: [],
-    output_style: "default",
-  };
+  });
 }
 
 // Generate realistic Claude assistant messages
@@ -66,11 +65,15 @@ export function createAssistantMessage(
       id: "msg_" + generateId(),
       type: "message",
       role: "assistant",
-      content: [{ type: "text", text: content }],
+      content: [makeTextBlock(content)],
       model: "claude-3-5-sonnet-20241022",
       stop_reason: "end_turn",
       stop_sequence: null,
-      usage: { input_tokens: 25, output_tokens: 45 },
+      container: null,
+      context_management: null,
+      diagnostics: null,
+      stop_details: null,
+      usage: makeUsage({ input_tokens: 25, output_tokens: 45 }),
     },
     parent_tool_use_id: null,
     session_id: sessionId,
@@ -95,7 +98,7 @@ export function createCombinedAssistantMessage(
       type: "message",
       role: "assistant",
       content: [
-        { type: "text", text: textContent },
+        makeTextBlock(textContent),
         {
           type: "tool_use",
           id: toolUse.id,
@@ -106,7 +109,11 @@ export function createCombinedAssistantMessage(
       model: "claude-3-5-sonnet-20241022",
       stop_reason: "tool_use",
       stop_sequence: null,
-      usage: { input_tokens: 25, output_tokens: 65 },
+      container: null,
+      context_management: null,
+      diagnostics: null,
+      stop_details: null,
+      usage: makeUsage({ input_tokens: 25, output_tokens: 65 }),
     },
     parent_tool_use_id: null,
     session_id: sessionId,
@@ -129,12 +136,15 @@ export function createResultMessage(
     is_error: false,
     num_turns: 1,
     result: "Success",
+    stop_reason: "end_turn",
+    modelUsage: {},
     total_cost_usd: (inputTokens * 0.003 + outputTokens * 0.015) / 1000,
-    usage: {
+    // `total_tokens` is not part of the SDK's usage shape; input + output are
+    // reported separately and the UI sums them where it needs a total.
+    usage: makeResultUsage({
       input_tokens: inputTokens,
       output_tokens: outputTokens,
-      total_tokens: inputTokens + outputTokens,
-    },
+    }),
     permission_denials: [],
     uuid: generateId(),
   };
@@ -165,7 +175,11 @@ export function createExitPlanModeToolUse(
       model: "claude-3-5-sonnet-20241022",
       stop_reason: "tool_use",
       stop_sequence: null,
-      usage: { input_tokens: 25, output_tokens: 28 },
+      container: null,
+      context_management: null,
+      diagnostics: null,
+      stop_details: null,
+      usage: makeUsage({ input_tokens: 25, output_tokens: 28 }),
     },
     parent_tool_use_id: null,
     session_id: sessionId,
@@ -198,7 +212,11 @@ export function createExitPlanModeToolUseWithId(
       model: "claude-3-5-sonnet-20241022",
       stop_reason: "tool_use",
       stop_sequence: null,
-      usage: { input_tokens: 25, output_tokens: 28 },
+      container: null,
+      context_management: null,
+      diagnostics: null,
+      stop_details: null,
+      usage: makeUsage({ input_tokens: 25, output_tokens: 28 }),
     },
     parent_tool_use_id: null,
     session_id: sessionId,
@@ -254,7 +272,11 @@ export function createToolUseMessage(
       model: "claude-3-5-sonnet-20241022",
       stop_reason: "tool_use",
       stop_sequence: null,
-      usage: { input_tokens: 45, output_tokens: 28 },
+      container: null,
+      context_management: null,
+      diagnostics: null,
+      stop_details: null,
+      usage: makeUsage({ input_tokens: 45, output_tokens: 28 }),
     },
     parent_tool_use_id: null,
     session_id: sessionId,

@@ -80,7 +80,7 @@ App CSS below that block is unlayered and so overrides all Astryx layers. Keep i
 
 ## Claude Command Integration
 
-Backend uses Claude Code SDK executing commands with:
+Backend uses the Claude Agent SDK (`query()`) executing commands with:
 
 - `--output-format stream-json` - Streaming JSON responses
 - `--verbose` - Detailed execution information
@@ -99,9 +99,24 @@ Universal detection supporting npm, pnpm, asdf, yarn installations:
 
 **Implementation**: `backend/cli/validation.ts` with `detectClaudeCliPath()`, `validateClaudeCli()`
 
+**Why this is still here.** The Agent SDK ships its own Claude Code executable
+as platform-specific optional dependencies and would use it if
+`pathToClaudeCodeExecutable` were omitted. This app deliberately keeps pointing
+the SDK at the user's own installed CLI, which is what makes the single-binary
+distribution work without bundling a platform binary per target.
+
+The tradeoff: the SDK version and the CLI it drives are now independent, so a
+user whose installed `claude` is much older or newer than the SDK's
+`claudeCodeVersion` is a supported-but-untested combination. If sessions fail to
+start with protocol-ish errors, compare `claude --version` against the SDK's
+`claudeCodeVersion` before looking anywhere else. Dropping
+`pathToClaudeCodeExecutable` (and `executable: "node"`) in
+`backend/handlers/chat.ts` switches to the bundled executable and removes the
+skew, at the cost of bundling binaries into the build.
+
 ## Session Continuity
 
-Conversation continuity using Claude Code SDK's session management:
+Conversation continuity using the Claude Agent SDK's session management:
 
 1. First message starts new Claude session
 2. Frontend extracts `session_id` from SDK messages
@@ -199,9 +214,9 @@ npm run dev
 5. **TypeScript Throughout**: Consistent type safety across all components
 6. **Project Directory Selection**: User-chosen working directories for contextual file access
 
-## Claude Code SDK Types Reference
+## Claude Agent SDK Types Reference
 
-**SDK Types**: `frontend/node_modules/@anthropic-ai/claude-code/sdk.d.ts`
+**SDK Types**: `frontend/node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts`
 
 ```typescript
 // Type extraction
@@ -220,6 +235,60 @@ console.log(systemMsg.cwd);
 ```
 
 **Key Points**: System fields directly on object, Assistant content nested under `message.content`, Result has `subtype` field
+
+### `type: "system"` is a wide union
+
+Only `subtype: "init"` is the session banner. Compaction boundaries, status
+updates, hook progress, task notifications and much more all arrive as
+`type: "system"` with a different `subtype`. Narrow on `subtype` before reading
+`init`-only fields (`tools`, `cwd`, `model`). The app models this as
+`SDKSystemLikeMessage` in `frontend/src/types.ts`, and
+`SystemMessageComponent` falls back to a JSON dump for subtypes it has no
+dedicated rendering for.
+
+**Display filtering**: because that fallback would otherwise dump SDK telemetry
+into the transcript, `NON_DISPLAYED_SYSTEM_SUBTYPES` in
+`frontend/src/utils/UnifiedMessageProcessor.ts` keeps the purely-internal
+subtypes out of the UI (`init`, `hook_started`, `hook_progress`,
+`hook_response`, `thinking_tokens`). It is a **blocklist**, so a future SDK
+version can add a noisy subtype that shows up until it is listed there.
+
+`init` is filtered from **display only**. It must still be processed, because
+`setHasReceivedInit(true)` is what allows `session_id` to be picked up from
+subsequent assistant messages — dropping init entirely silently breaks session
+continuity. `processSystemMessage` runs that side effect before filtering, and
+`useClaudeStreaming.test.ts` locks the pairing in.
+
+Assistant _thinking_ content and `result`/`success` messages are unaffected —
+they arrive as assistant content blocks and `type: "result"` respectively, not
+as `type: "system"`.
+
+### Assistant payloads use the Anthropic API `Beta*` types
+
+`SDKAssistantMessage["message"]` is a `BetaMessage` and `SDKUserMessage["message"]`
+is a `MessageParam` — only the former has an `id`, and `MessageParam.content`
+may be a plain string rather than a block array. A tool_use block's `input` is
+typed `unknown`. Because these types come from the `@anthropic-ai/sdk` peer
+dependency, they resolve properly and are enforced; narrow rather than assume.
+
+Constructing these shapes by hand requires a lot of required bookkeeping
+(`cache_creation`, `iterations`, `citations`, `stop_details`, …), so demo-mode
+and test fixtures build them via the factories in
+`frontend/src/utils/sdkFixtures.ts` (`makeUsage`, `makeResultUsage`,
+`makeTextBlock`, `makeAPIAssistantMessage`, `makeSystemInitMessage`,
+`firstContentBlock`) instead of casting.
+
+### The system prompt is opt-in
+
+`query()` sends an **empty** system prompt unless `systemPrompt` is set — the
+Agent SDK is a generic agent harness, not Claude Code, by default. This app
+passes `{ type: "preset", preset: "claude_code" }` in `backend/handlers/chat.ts`
+to get the CLI's own prompt. Removing that line silently strips tool guidance,
+CLAUDE.md handling, and the rest of Claude Code's behaviour.
+
+`settingSources`, by contrast, defaults to loading all filesystem settings
+(`user`, `project`, `local`), so CLAUDE.md and `settings.json` are picked up
+without extra configuration.
 
 ## Permission Mode Switching
 
@@ -255,17 +324,38 @@ cd backend && deno task build  # Local building
 
 **Automated**: Push git tags → GitHub Actions builds for Linux/macOS (x64/ARM64)
 
-## Claude Code Dependency Management
+## Claude Agent SDK Dependency Management
 
-**Policy**: Fixed versions (no caret `^`) for consistency across frontend/backend
+The SDK package is **`@anthropic-ai/claude-agent-sdk`**. The former
+`@anthropic-ai/claude-code` package is the legacy name and is no longer used
+here — its `1.x` versions do not correspond to Agent SDK versions at all, so
+don't carry an old pin across. The Agent SDK's own `package.json` records the
+Claude Code release it tracks in a `claudeCodeVersion` field.
+
+**Policy**: Fixed versions (no caret `^`) for consistency across frontend/backend.
+It is pinned in four places: `frontend/package.json`, `backend/package.json`
+(both `dependencies` and `peerDependencies`), and `backend/deno.json`.
 
 **Update Procedure**:
 
-1. Check versions: `grep "@anthropic-ai/claude-code" frontend/package.json backend/deno.json`
+1. Check versions: `grep -rn "@anthropic-ai/claude-agent-sdk" frontend/package.json backend/package.json backend/deno.json`
 2. Update frontend package.json and `npm install`
 3. Update backend deno.json imports and `rm deno.lock && deno cache cli/deno.ts`
-4. Update backend package.json and `npm install`
+4. Update backend package.json (dependencies **and** peerDependencies) and `npm install`
 5. Verify: `make check`
+
+**Expect type churn on upgrades.** The SDK re-exports Anthropic API types, and
+`make check` typechecks test and demo fixtures via the frontend build (`tsc -b`),
+which is stricter than `tsc --noEmit` in either workspace alone. New required
+fields on `BetaUsage` / `BetaMessage` / `SDKSystemMessage` surface as fixture
+errors — add them to the factories in `frontend/src/utils/sdkFixtures.ts` rather
+than at each call site.
+
+The SDK declares `@anthropic-ai/sdk`, `@modelcontextprotocol/sdk`, and `zod` as
+peer dependencies; npm installs them automatically and nothing here imports them
+directly. It also ships the Claude Code executable as platform-specific
+optional dependencies, but this app keeps passing its own detected
+`pathToClaudeCodeExecutable` (see below).
 
 ## Commands for Claude
 

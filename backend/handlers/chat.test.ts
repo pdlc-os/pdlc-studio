@@ -2,16 +2,19 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Context } from "hono";
 import { handleChatRequest } from "./chat";
 import type { ChatRequest } from "../../shared/types";
-import { query } from "@anthropic-ai/claude-code";
+import { AbortError, query } from "@anthropic-ai/claude-agent-sdk";
 
-// Define minimal mock types for Claude Code SDK to maintain type safety in tests
-type MockClaudeCode = {
-  query: typeof vi.fn;
-};
-
-vi.mock("@anthropic-ai/claude-code", (): MockClaudeCode => ({
-  query: vi.fn(),
-}));
+// Stub only `query`. The rest of the module is kept intact so the handler's
+// `error instanceof AbortError` check runs against the SDK's real class — a
+// hand-rolled stub would pass the check while proving nothing.
+vi.mock("@anthropic-ai/claude-agent-sdk", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@anthropic-ai/claude-agent-sdk")>();
+  return {
+    ...actual,
+    query: vi.fn(),
+  };
+});
 
 // Mock logger
 vi.mock("../utils/logger", () => ({
@@ -466,10 +469,7 @@ describe("Chat Handler - Permission Mode Tests", () => {
       });
     });
 
-    // TODO: Re-enable when AbortError is properly exported from Claude SDK
-    it.skip("should handle abort errors when using permissionMode", async () => {
-      // Test currently skipped because AbortError is not exported from Claude SDK
-      // When AbortError becomes available, update this test accordingly
+    it("should report an aborted request as aborted, not as an error", async () => {
       const chatRequest: ChatRequest = {
         message: "Abort test",
         requestId: "test-abort",
@@ -480,7 +480,7 @@ describe("Chat Handler - Permission Mode Tests", () => {
 
       mockQuery.mockReturnValue({
         [Symbol.asyncIterator]: async function* () {
-          throw new Error("Operation aborted");
+          throw new AbortError("Operation aborted");
         },
         interrupt: vi.fn(),
         next: vi.fn(),
@@ -505,11 +505,7 @@ describe("Chat Handler - Permission Mode Tests", () => {
       const lines = allChunks.trim().split("\n");
       expect(lines).toHaveLength(1);
 
-      const errorResponse = JSON.parse(lines[0]);
-      expect(errorResponse).toEqual({
-        type: "error",
-        error: "Operation aborted",
-      });
+      expect(JSON.parse(lines[0])).toEqual({ type: "aborted" });
     });
   });
 

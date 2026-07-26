@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { createExitPlanModeToolResult } from "../../utils/mockResponseGenerator";
+import { firstContentBlock } from "../../utils/sdkFixtures";
 
 // Mock the message converter
 vi.mock("../useMessageConverter", () => ({
@@ -205,8 +206,12 @@ describe("Plan Rejection Workflow Tests", () => {
       // Verify stream data structure
       expect(mockStreamData.type).toBe("claude_json");
       expect(mockStreamData.data.type).toBe("user");
-      expect(mockStreamData.data.message.content[0].type).toBe("tool_result");
-      expect(mockStreamData.data.message.content[0].is_error).toBe(true);
+      expect(firstContentBlock(mockStreamData.data.message).type).toBe(
+        "tool_result",
+      );
+      expect(firstContentBlock(mockStreamData.data.message).is_error).toBe(
+        true,
+      );
     });
 
     it("should handle tool_result message processing for plan rejection", () => {
@@ -277,7 +282,7 @@ describe("Plan Rejection Workflow Tests", () => {
 
       const result = createExitPlanModeToolResult(sessionId, toolUseId);
       expect(result.session_id).toBeUndefined();
-      expect(result.message.content[0].tool_use_id).toBeNull();
+      expect(firstContentBlock(result.message).tool_use_id).toBeNull();
     });
   });
 
@@ -290,8 +295,8 @@ describe("Plan Rejection Workflow Tests", () => {
       );
 
       // Rejection should have is_error: true
-      expect(rejectionResult.message.content[0].is_error).toBe(true);
-      expect(rejectionResult.message.content[0].content).toBe(
+      expect(firstContentBlock(rejectionResult.message).is_error).toBe(true);
+      expect(firstContentBlock(rejectionResult.message).content).toBe(
         "Exit plan mode?",
       );
 
@@ -309,7 +314,7 @@ describe("Plan Rejection Workflow Tests", () => {
       );
 
       // The tool_result should reference the original tool_use
-      expect(rejectionResult.message.content[0].tool_use_id).toBe(
+      expect(firstContentBlock(rejectionResult.message).tool_use_id).toBe(
         originalToolUseId,
       );
       expect(rejectionResult.type).toBe("user");
