@@ -322,7 +322,8 @@ Note the CLI can decline to honour the mode: a `permissions.disableBypassPermiss
 cd backend && deno task build  # Local building
 ```
 
-**Automated**: Push git tags → GitHub Actions builds for Linux/macOS (x64/ARM64)
+**Automated**: see [Release Process](#release-process) — GitHub Actions builds
+Linux (x64/arm64), macOS (x64/arm64) and Windows (x64).
 
 ## Claude Agent SDK Dependency Management
 
@@ -382,21 +383,71 @@ optional dependencies, but this app keeps passing its own detected
 2. Commit changes (Lefthook runs `make check`)
 3. Push and create PR with appropriate labels:
    ```bash
-   gh pr create --title "..." --body "..." --label "bug" --label "backend"
+   gh pr create --title "..." --body "..." --label "bug"
    ```
 4. Include Type of Change checkboxes and description
 5. Request review and merge after approval
 
 ### Labels
 
-🐛 `bug`, ✨ `feature`, 💥 `breaking`, 📚 `documentation`, ⚡ `performance`, 🔨 `refactor`, 🧪 `test`, 🔧 `chore`, 🖥️ `backend`, 🎨 `frontend`
+Only GitHub's default label set exists on this repo — check with
+`gh label list` before using one, since `gh pr create` fails outright on an
+unknown label:
 
-### Release Process (Automated with tagpr)
+`bug`, `documentation`, `duplicate`, `enhancement`, `good first issue`,
+`help wanted`, `invalid`, `question`, `wontfix`
 
-1. Feature PRs merged → tagpr creates release PR
-2. Add version labels if needed (minor/major)
-3. Merge release PR → automatic tag creation
-4. GitHub Actions builds binaries automatically
+An earlier revision of this file documented a richer scheme (`feature`,
+`breaking`, `refactor`, `backend`, `frontend`, …) that was never created. Create
+those labels first if you want them; nothing depends on them now that version
+selection is explicit rather than label-driven.
+
+### Release Process
+
+Releases run entirely from `.github/workflows/release.yml`. One command:
+
+```bash
+gh workflow run release.yml -f version=0.3.0    # no "v" prefix
+```
+
+Or use the **Run workflow** button on the Release workflow in the Actions tab.
+
+That single run does everything: bumps `backend/package.json`, commits it to the
+branch you dispatched from, creates and pushes the tag, builds all five
+binaries, and publishes the GitHub Release with auto-generated notes.
+
+Version numbers are plain semver with **no `v` prefix** (`0.3.0`, not `v0.3.0`)
+— the workflow rejects the prefixed form so tags stay consistent with `0.2.0`.
+Re-releasing an existing version is refused rather than silently overwriting.
+
+`backend/package.json` is the single source of truth for the version:
+`generate-version.js` reads it to produce the gitignored `cli/version.ts`, so
+`pdlc-studio --version` follows automatically.
+
+**Pushing a tag by hand still works** (`git tag 0.3.0 && git push origin 0.3.0`)
+and skips only the bump — remember to bump `backend/package.json` yourself, or
+the binaries will report the previous version.
+
+**npm publishing is opt-in.** The `npm-publish` job only runs when the
+`ENABLE_NPM_PUBLISH` repository variable is `true`. `pdlc-studio` has never
+been published, and npm publication is effectively irreversible (unpublish is
+limited to 72 hours and a version can never be reused), so releasing does not
+touch the registry unless you ask it to. The first publish will likely also
+need a `NODE_AUTH_TOKEN`, since OIDC trusted publishing must be configured
+against an npm package that already exists.
+
+#### Why not tagpr
+
+`tagpr` was removed. It required a Personal Access Token, because a tag pushed
+with the built-in `GITHUB_TOKEN` does not trigger other workflows — so its
+auto-created tag would never have started a release build. Keeping the whole
+release in one workflow run sidesteps that entirely and leaves no expiring
+credential to rotate. (tagpr had also never succeeded in this repo: every run
+failed on a missing `GH_PAT`, and no `CHANGELOG.md` was ever produced.)
+
+The tradeoff is no generated `CHANGELOG.md` and no label-driven version
+selection — you choose the version explicitly. `generate_release_notes: true`
+means GitHub still assembles release notes from merged PRs.
 
 ### GitHub Sub-Issues API
 

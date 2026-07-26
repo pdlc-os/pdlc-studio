@@ -1,12 +1,102 @@
 name: Release
 
+# Two ways in:
+#
+# 1. workflow_dispatch with a version — the normal path. `prepare` bumps
+#    backend/package.json, commits, and creates the tag, then this same run
+#    builds and publishes. Doing it in one run is what lets the built-in
+#    GITHUB_TOKEN suffice: a tag pushed with GITHUB_TOKEN does not trigger
+#    other workflows, so a separate tag-triggered run would never fire.
+#    Replaces tagpr, which needed a PAT for exactly that reason.
+#
+# 2. Pushing a tag by hand — still supported. `prepare` is skipped and the
+#    pushed tag is used as-is.
 on:
   push:
     tags:
       - "*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 0.3.0 (no "v" prefix)'
+        required: true
+        type: string
 
 jobs:
+  prepare:
+    # Only the manual path needs a tag created; a tag push already has one.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          # Full history and tags so the duplicate-tag check is meaningful.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Bump version, commit and tag
+        id: bump
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error title=Invalid version::'$VERSION' is not semver. Use 0.3.0, not v0.3.0 (.tagpr used vPrefix=false and the existing 0.2.0 tag has no prefix)."
+            exit 1
+          fi
+
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "::error title=Tag exists::$VERSION is already tagged. Releases are immutable — pick a new version."
+            exit 1
+          fi
+
+          # Regex rather than JSON.parse/stringify so the file's existing
+          # formatting survives untouched.
+          node -e '
+            const fs = require("fs");
+            const path = "backend/package.json";
+            const before = fs.readFileSync(path, "utf8");
+            const after = before.replace(
+              /^(\s*"version":\s*)"[^"]+"/m,
+              `$1"${process.env.VERSION}"`,
+            );
+            fs.writeFileSync(path, after);
+          '
+
+          ACTUAL="$(node -p 'require("./backend/package.json").version')"
+          if [ "$ACTUAL" != "$VERSION" ]; then
+            echo "::error title=Bump failed::backend/package.json reports '$ACTUAL' after the edit, expected '$VERSION'."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # generate-version.js reads this file, so the binary's --version
+          # follows from it. cli/version.ts is gitignored and rebuilt below.
+          if git diff --quiet -- backend/package.json; then
+            echo "backend/package.json is already at $VERSION; tagging the current commit."
+          else
+            git add backend/package.json
+            git commit -m "Release $VERSION"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+          git tag -a "$VERSION" -m "$VERSION"
+          git push origin "$VERSION"
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: [prepare]
+    # `prepare` is skipped on the tag-push path, and a skipped dependency would
+    # otherwise skip this job too.
+    if: ${{ !cancelled() && needs.prepare.result != 'failure' }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -30,6 +120,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          # On the manual path github.ref is a branch, so build the tag that
+          # `prepare` just created rather than whatever main has moved to.
+          ref: ${{ needs.prepare.outputs.tag || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -74,13 +168,16 @@ jobs:
           path: dist/${{ matrix.artifact_name }}*
 
   release:
-    needs: build
+    needs: [prepare, build]
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ needs.prepare.outputs.tag || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -125,6 +222,9 @@ jobs:
       - name: Upload release assets
         uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836 # v2.3.3
         with:
+          # Required on the manual path: github.ref is a branch there, so the
+          # tag cannot be inferred.
+          tag_name: ${{ needs.prepare.outputs.tag || github.ref_name }}
           files: |
             artifacts/*/*
             frontend/demo-recordings/*.webm
@@ -134,12 +234,13 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836 # v2.3.3
         with:
+          tag_name: ${{ needs.prepare.outputs.tag || github.ref_name }}
           generate_release_notes: true
           draft: false
           prerelease: false
 
   npm-publish:
-    needs: build
+    needs: [prepare, build]
     # Opt-in. Publishing to npm is effectively irreversible: unpublish is
     # limited to a 72-hour window and a version number can never be reused.
     # `pdlc-studio` has never been published, so the first run would also claim
@@ -149,7 +250,7 @@ jobs:
     #
     # Note the first publish likely needs a NODE_AUTH_TOKEN regardless: OIDC
     # trusted publishing has to be configured against an existing npm package.
-    if: vars.ENABLE_NPM_PUBLISH == 'true'
+    if: ${{ !cancelled() && needs.build.result == 'success' && vars.ENABLE_NPM_PUBLISH == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write # Required for OIDC authentication
@@ -157,6 +258,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ needs.prepare.outputs.tag || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
