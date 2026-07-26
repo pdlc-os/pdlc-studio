@@ -6,6 +6,7 @@ import { Heading } from "@astryxdesign/core/Heading";
 import { Text } from "@astryxdesign/core/Text";
 import { List } from "@astryxdesign/core/List";
 import { Item } from "@astryxdesign/core/Item";
+import { getProjectName } from "../utils/projectPath";
 import { Icon } from "@astryxdesign/core/Icon";
 import { Button } from "@astryxdesign/core/Button";
 import { Spinner } from "@astryxdesign/core/Spinner";
@@ -74,97 +75,128 @@ export function ProjectSelector() {
 
   return (
     <div className="launch-viewport">
-      <div className="launch-panel" data-testid="launch-panel">
-        {/* Left: identity and actions */}
-        <div className="launch-main">
-          <VStack gap={3} hAlign="center">
-            <div className="launch-logo">
-              <AppIcon size={88} />
-            </div>
-            <VStack gap={1} hAlign="center">
-              <Heading level={1}>PDLC Studio</Heading>
-              <Text size="sm" color="secondary">
-                {/* Injected from backend/package.json at build time. */}
-                Version {__APP_VERSION__}
-              </Text>
-            </VStack>
-          </VStack>
-
-          <VStack gap={2} className="launch-actions" width="100%">
-            <Button
-              label="Create New Project..."
-              variant="secondary"
-              width="100%"
-              icon={<Icon icon={FolderPlus} />}
-              onClick={() => setActiveDialog("new")}
-            />
-            <Button
-              label="Clone Git Repository..."
-              variant="secondary"
-              width="100%"
-              icon={<Icon icon={GitBranch} />}
-              onClick={() => setActiveDialog("clone")}
-            />
-            <Button
-              label="Open Existing Project..."
-              variant="secondary"
-              width="100%"
-              icon={<Icon icon={FolderOpen} />}
-              onClick={() => setActiveDialog("open")}
-            />
-          </VStack>
-        </div>
-
-        {/* Right: recent projects */}
-        <aside className="launch-aside">
-          <HStack justify="between" vAlign="center" padding={4}>
-            <Heading level={2}>Recent Projects</Heading>
-            <SettingsButton onClick={() => setActiveDialog("settings")} />
-          </HStack>
-
-          <div className="launch-aside-scroll">
-            {loading ? (
-              <VStack gap={3} hAlign="center" justify="center" padding={6}>
-                <Spinner size="md" label="Loading projects..." />
-              </VStack>
-            ) : error ? (
-              <div style={{ padding: "var(--spacing-4)" }}>
-                <Banner
-                  status="error"
-                  title="Error loading projects"
-                  description={error}
-                />
+      {/*
+        Wrapper exists only to carry the gradient halo. It cannot live on the
+        panel itself: .launch-panel needs overflow:hidden to clip the aside's
+        background to its rounded corners, which would clip the glow too.
+      */}
+      <div className="launch-panel-glow">
+        <div className="launch-panel" data-testid="launch-panel">
+          {/* Left: identity and actions */}
+          <div className="launch-main">
+            <VStack gap={3} hAlign="center">
+              <div className="launch-logo">
+                <AppIcon size={88} />
               </div>
-            ) : projects.length === 0 ? (
-              // Mirrors the reference screenshot's centred "No Recent Projects".
-              <VStack gap={2} hAlign="center" justify="center" padding={6}>
-                <Text color="secondary">No Recent Projects</Text>
+              <VStack gap={1} hAlign="center">
+                <Heading level={1}>PDLC Studio</Heading>
                 <Text size="sm" color="secondary">
-                  Open a project to start a conversation.
+                  {/* Injected from backend/package.json at build time. */}
+                  Version {__APP_VERSION__}
                 </Text>
               </VStack>
-            ) : (
-              <List>
-                {projects.map((project) => (
-                  <Item
-                    as="li"
-                    key={project.path}
-                    data-testid="project-card"
-                    onClick={() => openProject(project.path)}
-                    startContent={
-                      <Icon icon={FolderOpen} color="secondary" size="sm" />
-                    }
-                    label={
-                      <Text type="code" size="sm">
-                        {project.path}
-                      </Text>
-                    }
-                  />
-                ))}
-              </List>
-            )}
+            </VStack>
+
+            <VStack gap={2} className="launch-actions" width="100%">
+              <Button
+                label="Create New Project..."
+                variant="secondary"
+                width="100%"
+                icon={<Icon icon={FolderPlus} />}
+                onClick={() => setActiveDialog("new")}
+              />
+              <Button
+                label="Clone Git Repository..."
+                variant="secondary"
+                width="100%"
+                icon={<Icon icon={GitBranch} />}
+                onClick={() => setActiveDialog("clone")}
+              />
+              <Button
+                label="Open Existing Project..."
+                variant="secondary"
+                width="100%"
+                icon={<Icon icon={FolderOpen} />}
+                onClick={() => setActiveDialog("open")}
+              />
+            </VStack>
           </div>
-        </aside>
+
+          {/* Right: recent projects */}
+          <aside className="launch-aside">
+            <HStack justify="between" vAlign="center" padding={4}>
+              <Heading level={2}>Recent Projects</Heading>
+              <SettingsButton onClick={() => setActiveDialog("settings")} />
+            </HStack>
+
+            <div className="launch-aside-scroll">
+              {loading ? (
+                <VStack gap={3} hAlign="center" justify="center" padding={6}>
+                  <Spinner size="md" label="Loading projects..." />
+                </VStack>
+              ) : error ? (
+                <div style={{ padding: "var(--spacing-4)" }}>
+                  <Banner
+                    status="error"
+                    title="Error loading projects"
+                    description={error}
+                  />
+                </div>
+              ) : projects.length === 0 ? (
+                // Mirrors the reference screenshot's centred "No Recent Projects".
+                <VStack gap={2} hAlign="center" justify="center" padding={6}>
+                  <Text color="secondary">No Recent Projects</Text>
+                  <Text size="sm" color="secondary">
+                    Open a project to start a conversation.
+                  </Text>
+                </VStack>
+              ) : (
+                <List>
+                  {projects.map((project) => (
+                    <Item
+                      as="li"
+                      key={project.path}
+                      className="recent-project-item"
+                      data-testid="project-card"
+                      onClick={() => openProject(project.path)}
+                      /*
+                       * Item centres its start slot against the whole row by
+                       * default, which drops the folder into the gap between
+                       * the name and the path now that the row is two lines.
+                       * "start" puts it back on the name.
+                       */
+                      align="start"
+                      startContent={
+                        <Icon icon={FolderOpen} color="secondary" size="sm" />
+                      }
+                      /*
+                       * Name first, path underneath. The leaf is what a person
+                       * recognises, but it is not unique — two checkouts of the
+                       * same repo share it — so the path stays as the thing
+                       * that actually identifies the row.
+                       */
+                      label={getProjectName(project.path)}
+                      /*
+                       * A bare span, not <Text>: Item's description already
+                       * renders smaller and in the secondary colour, and a
+                       * nested <Text> re-asserts its own size on top of that,
+                       * which puts the path back at the label's size. This
+                       * inherits the description treatment and changes only the
+                       * family, since a path reads better monospaced.
+                       */
+                      description={
+                        <span className="app-mono">{project.path}</span>
+                      }
+                      // Long paths get one line with an ellipsis rather than
+                      // wrapping and pushing the next row down the list.
+                      descriptionLines={1}
+                    />
+                  ))}
+                </List>
+              )}
+            </div>
+          </aside>
+        </div>
       </div>
 
       <DirectoryPickerDialog

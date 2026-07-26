@@ -23,6 +23,7 @@ import { usePermissions } from "../hooks/chat/usePermissions";
 import { usePermissionMode } from "../hooks/chat/usePermissionMode";
 import { useAbortController } from "../hooks/chat/useAbortController";
 import { useAutoHistoryLoader } from "../hooks/useHistoryLoader";
+import { useSettings } from "../hooks/useSettings";
 import { SettingsButton } from "./SettingsButton";
 import { SettingsModal } from "./SettingsModal";
 import { HistoryButton } from "./chat/HistoryButton";
@@ -40,6 +41,7 @@ export function ChatPage() {
   const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const { conversationFont, conversationFontSize } = useSettings();
 
   // Extract and normalize working directory from URL
   const workingDirectory = (() => {
@@ -434,7 +436,13 @@ export function ChatPage() {
     <div className="app-shell">
       {/* Header */}
       <HStack justify="between" vAlign="center" gap={4}>
-        <HStack gap={3} vAlign="center">
+        {/*
+         * vAlign="start", not "center": the text beside the mark is a VStack
+         * that grows a second row once a working directory is open, and
+         * centring against that two-row block drops the mark ~16px below the
+         * app name it is supposed to sit next to.
+         */}
+        <HStack gap={3} vAlign="start">
           {isHistoryView && (
             <IconButton
               onClick={handleBackToChat}
@@ -457,7 +465,14 @@ export function ChatPage() {
            * would make the click target and its accessible name inconsistent
            * with the other crumbs.
            */}
-          <AppIcon size={28} variant="mark" />
+          <button
+            type="button"
+            className="app-mark-button"
+            onClick={handleBackToProjects}
+            aria-label="PDLC Studio home"
+          >
+            <AppIcon size={32} variant="mark" />
+          </button>
           <VStack gap={1}>
             <Breadcrumbs label="Breadcrumb">
               <BreadcrumbItem onClick={handleBackToProjects}>
@@ -549,11 +564,24 @@ export function ChatPage() {
                 showPermissions={isPermissionMode}
                 permissionData={permissionData}
                 planPermissionData={planPermissionData}
+                workingDirectory={workingDirectory || undefined}
               />
             }
           >
             {messages.length > 0 || isLoading ? (
-              <ChatMessages messages={messages} isLoading={isLoading} />
+              /*
+               * Conversation typography is scoped to the transcript, not the
+               * whole chat region: the composer is an input control and stays
+               * on the UI font, so changing the reading face never disturbs
+               * the thing you type into.
+               */
+              <div
+                className="conversation-typography"
+                data-font={conversationFont}
+                data-size={conversationFontSize}
+              >
+                <ChatMessages messages={messages} isLoading={isLoading} />
+              </div>
             ) : null}
           </ChatLayout>
         </div>

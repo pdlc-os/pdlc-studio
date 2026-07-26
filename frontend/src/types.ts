@@ -256,6 +256,8 @@ export type {
   CreateProjectRequest,
   CloneRepositoryRequest,
   ProjectPathResponse,
+  SlashCommandInfo,
+  SlashCommandsResponse,
 } from "../../shared/types";
 
 // Re-export SDK types

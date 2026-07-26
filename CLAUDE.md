@@ -42,6 +42,7 @@ lefthook run pre-commit
 - `GET /api/directories?path=` - List subdirectories for the launch screen's folder picker. Omit `path` to list the home directory; `~` is expanded. Read-only, directories only, dot-directories hidden.
 - `POST /api/projects/create` - Create a project directory (`{ parentPath, name, initGit? }`) → `{ path }`
 - `POST /api/projects/clone` - `git clone` into a directory (`{ url, parentPath, name? }`) → `{ path }`
+- `GET /api/commands?workingDirectory=` - Slash commands available to the composer's `/` picker → `{ commands }`
 
 The `create` and `clone` routes are registered **before** the parameterised
 `/api/projects/:encodedProjectName/...` routes, so "create" and "clone" are not
@@ -92,6 +93,18 @@ not exist (`--radius-page` does), and `--color-background-muted` is defined
 identically to `--color-background-body` in theme-neutral, so it yields no
 contrast.
 
+The panel sits on a **gradient halo** in the app mark's own blue-to-green sweep,
+plus `--shadow-med` for neutral depth — the gradient carries the hue, the shadow
+carries the lift. `box-shadow` cannot take a gradient, so the halo is a blurred
+pseudo-element, and it needs the extra `.launch-panel-glow` wrapper because the
+panel's `overflow: hidden` (which clips the aside) would otherwise clip it too.
+
+Its strength is baked into the gradient's **alpha values, not `opacity`**.
+`light-dark()` is a colour function: `opacity: light-dark(a, b)` is invalid, so
+the declaration is dropped and the glow silently renders at full strength — it
+first shipped looking like neon trim for exactly that reason. Keep the alphas
+low (13% light / 18% dark); this should read as depth, not decoration.
+
 ### Design System (Astryx)
 
 The UI is built on [Astryx](https://github.com/facebook/astryx) with the **neutral** theme. There is no Tailwind and no utility-class styling — build UI by composing Astryx components.
@@ -136,8 +149,22 @@ character between sizes.
 The threshold is a CSS-pixel size, but what matters is device pixels: at DPR 2 a
 28px mark gets 56 real ones and the ring holds. Branching on DPR would make the
 icon change shape when a window moves between displays, so call sites that want
-the ring below the threshold pass `variant="mark"` instead — the chat and demo
-headers do, at 28px.
+the ring below the threshold pass `variant="mark"` instead — the demo header
+does, at 28px. The chat header sits at 32px, exactly on the threshold, and keeps
+`variant="mark"` explicit so lowering the size later cannot silently drop the
+ring.
+
+In the chat header the mark is also a link home, wrapped in `.app-mark-button` —
+a bare `<button>` rather than Astryx's `IconButton`, which would box the mark in
+padding and a hover fill it does not need, since the artwork carries its own
+tile.
+
+Its vertical alignment is deliberate. The surrounding `HStack` uses
+`vAlign="start"`, not `"center"`: the text beside it is a `VStack` that grows a
+second row once a working directory is open, and centring against that two-row
+block drops the mark ~16px below the app name. Aligning tops leaves a residual
+half the height difference between the 32px mark and the 28px name row, which
+`.app-mark-button` cancels with a derived negative margin.
 
 **The mark lives in three places and nothing keeps them in sync automatically.**
 `brand/` is the source, `frontend/public/` holds the copies Vite serves as
@@ -394,6 +421,179 @@ CLAUDE.md handling, and the rest of Claude Code's behaviour.
 `settingSources`, by contrast, defaults to loading all filesystem settings
 (`user`, `project`, `local`), so CLAUDE.md and `settings.json` are picked up
 without extra configuration.
+
+## Composer
+
+### Auto-growing input
+
+The composer grows with its content and stops at a ceiling, after which it
+scrolls (`hooks/useAutoResizeTextarea.ts`, 40px–320px).
+
+This is hand-rolled because **Astryx's `TextArea` has no auto-grow prop** — it
+sizes from a fixed `rows` count, and `size` changes padding, not height. An
+earlier note in `utils/constants.ts` claimed "TextArea owns composer sizing",
+which is why the box stayed one row tall no matter how much was typed; that
+note has been corrected.
+
+The hook drives `style.height` on the element through a ref. Inline styles
+outrank the component's own StyleX classes, so this sticks without patching the
+design system. Two details are load-bearing: the height must collapse to `auto`
+before every `scrollHeight` read (a box already taller than its content reports
+its own height, not the content's), and the work happens in a layout effect so
+the resize paints in the same frame. Astryx ships `resize: vertical`, which
+`index.css` turns off — a manual drag would be undone by the next keystroke.
+
+### Slash-command picker
+
+Typing `/` opens a filterable menu of every command the user's Claude CLI
+exposes: built-ins, user and project commands, skills, and plugin-provided
+commands (`plugin:skill`). Arrow keys move, Enter or Tab inserts, Escape
+dismisses without clearing the line, and matching is fuzzy — `srev` finds
+`security-review`.
+
+**Discovery is the CLI's job.** `backend/handlers/commands.ts` opens a session
+and awaits `initializationResult()`, whose `commands` field is the resolved
+list. Nothing here knows where commands live on disk, so a newly added skill or
+plugin needs no code change.
+
+Two things make that cheap enough to do per project:
+
+- The prompt is an async iterable that **never yields**, not a string. A string
+  prompt would start a turn and bill a model call; the iterable lets the session
+  come up, answer the handshake, and close having sent nothing.
+- Results are cached per working directory (60s) with in-flight de-duplication,
+  because every miss spawns a CLI process.
+
+Discovery failure is deliberately silent — an empty list, never an error. The
+picker is an accelerator over an input that works fine without it.
+
+The composer's own open-condition is that the whole input is one unbroken
+`/token`. A space means the user has moved on to arguments, so the menu closes
+and Enter goes back to sending. That is also why inserting a command appends a
+trailing space.
+
+Note `SDKCommandsChangedMessage` (`subtype: "commands_changed"`) pushes a fresh
+list mid-session; it is in `NON_DISPLAYED_SYSTEM_SUBTYPES` because it carries a
+whole command array that would otherwise land in the transcript as JSON.
+
+Command names are painted with the **app mark's gradient** (`brand/README.md`),
+clipped to the glyphs so one sweep runs across each name. The brand ramp is used
+verbatim in dark mode only: `brand/README.md` notes a blue-to-green sweep has
+almost no contrast on a light tile, which bites harder on 13px text than on the
+icon, so light mode uses the same four hues darkened to clear 4.5:1. Matched
+characters are emphasised with weight, not colour, since colour is already spent
+on the gradient.
+
+The stops live in one place, `--command-sweep` in `index.css`, because the same
+gradient is used by the picker and the composer.
+
+### Highlighting the command inside the composer
+
+A chosen command keeps its gradient once it is in the text box, while the rest
+of the message stays ordinary body text. A `<textarea>` cannot style ranges of
+its own content, so `ComposerHighlight` does the standard overlay trick: the
+textarea keeps the text, caret, selection and all native editing but paints its
+glyphs `transparent`, and a read-only `aria-hidden` copy sits exactly on top
+rendering the same string with markup.
+
+Registration between the two layers is the whole game, and three things are
+load-bearing:
+
+- **Metrics are mirrored from the live element**, not hardcoded. Astryx styles
+  the textarea through StyleX, so its font and padding are not ours to assume.
+- **Geometry is measured against the textarea, not the shell.** Astryx nests the
+  `<textarea>` inside its own wrapper, so anchoring the overlay to the shell with
+  `inset: 0` lands it ~9px out horizontally.
+- **A `ResizeObserver` drives the geometry sync.** The auto-resize hook lives in
+  the parent and React runs a child's effects first, so the overlay's own layout
+  effect measures the textarea _before_ it has been resized. Growing hides this;
+  shrinking leaves the overlay stuck at its previous height.
+
+`caret-color` is restored explicitly, since it defaults to `color` and would
+otherwise go transparent with the text. `::placeholder` is unaffected — Astryx
+sets it to `--color-text-secondary` rather than inheriting.
+
+Only a token that names a **real** command is tinted, so the colour doubles as
+validation: a typo stays plain text, and a failed discovery simply highlights
+nothing.
+
+## Conversation Typography
+
+The message transcript has its own typeface and text scale, chosen in Settings →
+Conversation and stored in `AppSettings`. It defaults to **sans at Medium**,
+which sits in the middle of the ladder so the control has room in both
+directions. The scale in `index.css` is what carries the sizing decision: it was
+shifted up one step, so Medium renders at what was previously Large and Small
+bottoms out at Astryx's own base size rather than below it. Move the ladder, not
+the default, if the transcript should read bigger or smaller overall.
+
+Changing a default only affects **fresh** profiles: `getSettings()` layers
+stored values over defaults, so an existing profile keeps whatever it already
+had. Seeing a new default requires clearing the stored settings or changing it
+in the UI.
+
+**Scoped to the transcript only.** The wrapper carrying
+`.conversation-typography` goes around `ChatMessages`, not the whole chat
+region, so the composer stays an input control on the UI font.
+
+Two things make this less trivial than a `font-family` on a container:
+
+- **The size control has to redefine Astryx's `--font-size-*` tokens**, not set
+  `font-size`. Those tokens are rem values resolved against the root element, so
+  a container's font-size cannot touch them and Astryx text would ignore the
+  setting entirely. That means restating their base values in `index.css`;
+  `conversationTypography.test.ts` parses the shipped Astryx stylesheet and
+  fails if any drift on an upgrade.
+- **Astryx's chat surfaces set their own font.** Everything inherits correctly
+  from the message list down and then `.astryx-chat-message-bubble` resets to
+  the UI font. `.astryx-markdown` and `.astryx-text` do the same. All three are
+  opted back in by the documented component classes.
+
+### Bundled typefaces
+
+The picker offers eleven faces. Eight families are **bundled** so every option
+renders on a machine that has none of them installed, including the
+single-binary release: Vite emits them into `dist/static/assets` and
+`deno compile --include` embeds that, under the existing `/assets/*` mount.
+
+**Four of the offered names are proprietary and are not bundled** — Bookman Old
+Style, Helvetica, Proxima Nova, Georgia. Those stacks name the licensed font
+first and fall back to an OFL family:
+
+| Offered      | Falls back to | Substitution                 |
+| ------------ | ------------- | ---------------------------- |
+| Helvetica    | Arimo         | metric-compatible, no reflow |
+| Georgia      | Gelasio       | metric-compatible, no reflow |
+| Proxima Nova | Nunito Sans   | style only, metrics differ   |
+| Bookman      | Bitter        | style only, not a true clone |
+
+The two style-only substitutes lay text out differently from the licensed font,
+so the same message wraps differently on machines that do and don't have it.
+The picker surfaces each substitution in the dropdown rather than failing over
+silently. `THIRD-PARTY-LICENSES.md` carries the OFL attribution that
+redistribution requires.
+
+`@font-face` is declared by hand in `src/fonts.css`, not by importing each
+package's stylesheet. Those advertise a legacy `.woff` beside every `.woff2`,
+and Vite emits both — 604 kB of copies that no browser here can reach, since
+the app's own CSS uses `light-dark()`. Only the Latin subset at weights 400 and
+700 ships; the packages' default entry points pull every subset.
+`conversationTypography.test.ts` fails if a picker entry has no font stack, or
+if a bundled family stops being imported.
+
+Code is deliberately exempt — diffs and tool output depend on column alignment.
+That rule doubles `.conversation-typography` in its selector purely for
+specificity, so it outranks the `.astryx-markdown` rule that would otherwise
+make fenced code serif.
+
+Secondary text uses `em` rather than another absolute size, so it keeps its
+proportion as the scale changes; a nested `.astryx-text` inside the metadata row
+is reset to `inherit` to stop the two rules compounding to 64%.
+
+Adding a setting is a non-event: `getSettings()` layers stored values **over**
+defaults, so a profile written before a field existed reads the default rather
+than `undefined`, and only a change to an existing field's meaning needs a
+version bump.
 
 ## Permission Mode Switching
 

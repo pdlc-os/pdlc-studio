@@ -54,7 +54,7 @@ export function DemoPage() {
       .matches
       ? "dark"
       : "light";
-    return getStorageItem(STORAGE_KEYS.THEME, systemDefault);
+    return getStorageItem(STORAGE_KEYS.DEMO_THEME, systemDefault);
   });
 
   // Settings modal state
@@ -98,7 +98,7 @@ export function DemoPage() {
 
     // Save to localStorage (unless overridden by URL)
     if (!themeParam) {
-      setStorageItem(STORAGE_KEYS.THEME, theme);
+      setStorageItem(STORAGE_KEYS.DEMO_THEME, theme);
     }
 
     console.log(`Demo theme applied: ${theme}`, {

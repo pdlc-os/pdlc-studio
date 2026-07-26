@@ -57,3 +57,26 @@ if (!HTMLDialogElement.prototype.close) {
     this.dispatchEvent(new Event("close"));
   };
 }
+
+// jsdom does not implement scrollIntoView. Components that keep an active
+// option visible while arrowing through a list (the slash-command picker) call
+// it on every selection change, which would otherwise throw. There is no
+// layout to scroll in jsdom, so a no-op is the honest stand-in.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
+// jsdom implements no ResizeObserver. The composer's highlight overlay uses one
+// to re-register itself whenever the textarea changes size. jsdom performs no
+// layout, so nothing there ever resizes and a stub that never fires is
+// accurate rather than merely convenient — the observable behaviour under test
+// comes from the layout effect, which still runs.
+if (!("ResizeObserver" in globalThis)) {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  globalThis.ResizeObserver =
+    ResizeObserverStub as unknown as typeof ResizeObserver;
+}

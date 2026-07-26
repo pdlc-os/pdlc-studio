@@ -1,6 +1,11 @@
 // Note: the former UI_CONSTANTS (NEAR_BOTTOM_THRESHOLD_PX, TEXTAREA_MAX_HEIGHT)
 // were removed with the Astryx migration. ChatLayout owns scroll/auto-scroll
-// behaviour and TextArea owns composer sizing, so neither value is ours to set.
+// behaviour, so that threshold is genuinely not ours to set.
+//
+// The sizing half of that note was wrong: Astryx's TextArea sizes from a fixed
+// `rows` count and has no auto-grow, so the composer stayed one row tall no
+// matter how much was typed. The growth bounds now live with the code that
+// applies them, in hooks/useAutoResizeTextarea.ts.
 
 // Keyboard shortcuts
 export const KEYBOARD_SHORTCUTS = {

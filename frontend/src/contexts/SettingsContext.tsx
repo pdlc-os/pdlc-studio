@@ -49,6 +49,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       settings,
       theme: settings.theme,
       enterBehavior: settings.enterBehavior,
+      conversationFont: settings.conversationFont,
+      conversationFontSize: settings.conversationFontSize,
       toggleTheme,
       toggleEnterBehavior,
       updateSettings,

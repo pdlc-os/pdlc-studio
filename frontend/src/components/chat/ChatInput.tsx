@@ -1,11 +1,21 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useMemo, useId } from "react";
 import { ChatComposer } from "@astryxdesign/core/Chat";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { Button } from "@astryxdesign/core/Button";
 import { KEYBOARD_SHORTCUTS } from "../../utils/constants";
 import { useEnterBehavior } from "../../hooks/useSettings";
+import { useSlashCommands } from "../../hooks/useSlashCommands";
+import { useAutoResizeTextarea } from "../../hooks/useAutoResizeTextarea";
+import {
+  filterCommands,
+  getSlashQuery,
+  slashOptionId,
+} from "../../utils/slashCommands";
+import type { CommandMatch } from "../../utils/slashCommands";
 import { PermissionInputPanel } from "./PermissionInputPanel";
 import { PlanPermissionInputPanel } from "./PlanPermissionInputPanel";
+import { SlashCommandMenu } from "./SlashCommandMenu";
+import { ComposerHighlight } from "./ComposerHighlight";
 import type { PermissionMode } from "../../types";
 
 interface PermissionData {
@@ -52,6 +62,8 @@ interface ChatInputProps {
   showPermissions?: boolean;
   permissionData?: PermissionData;
   planPermissionData?: PlanPermissionData;
+  /** Scopes slash-command discovery; project-local commands depend on it. */
+  workingDirectory?: string;
 }
 
 // Get permission mode status indicator (CLI-style)
@@ -108,10 +120,41 @@ export function ChatInput({
   showPermissions = false,
   permissionData,
   planPermissionData,
+  workingDirectory,
 }: ChatInputProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [isComposing, setIsComposing] = useState(false);
   const { enterBehavior } = useEnterBehavior();
+
+  const { commands } = useSlashCommands(workingDirectory);
+  const listboxId = useId();
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  // Escape hides the menu without clearing the text. Keyed on the query it was
+  // dismissed for, so typing another character brings it straight back rather
+  // than requiring the user to clear the line.
+  const [dismissedQuery, setDismissedQuery] = useState<string | null>(null);
+
+  useAutoResizeTextarea(inputRef, input);
+
+  const slashQuery = getSlashQuery(input);
+  const matches = useMemo(
+    () => (slashQuery === null ? [] : filterCommands(commands, slashQuery)),
+    [commands, slashQuery],
+  );
+
+  const isMenuOpen =
+    slashQuery !== null &&
+    slashQuery !== dismissedQuery &&
+    matches.length > 0 &&
+    !isComposing &&
+    !isLoading &&
+    !showPermissions;
+
+  // Ranking changes as the query narrows, so an index held over from the
+  // previous keystroke could point at an unrelated command.
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [slashQuery]);
 
   // Focus input when not loading and not in permission mode
   useEffect(() => {
@@ -120,7 +163,59 @@ export function ChatInput({
     }
   }, [isLoading, showPermissions]);
 
+  const handleInputChange = (value: string) => {
+    // Any edit is a fresh intent to see the menu again.
+    setDismissedQuery(null);
+    onInputChange(value);
+  };
+
+  const applyCommand = (match: CommandMatch) => {
+    // Trailing space both readies the line for arguments and closes the menu,
+    // since the open-condition requires an unbroken /token.
+    onInputChange(`/${match.command.name} `);
+    setDismissedQuery(null);
+    inputRef.current?.focus();
+  };
+
+  const handleMenuKeyDown = (
+    e: React.KeyboardEvent<HTMLTextAreaElement>,
+  ): boolean => {
+    if (!isMenuOpen) return false;
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        setSelectedIndex((current) => (current + 1) % matches.length);
+        return true;
+      case "ArrowUp":
+        e.preventDefault();
+        setSelectedIndex(
+          (current) => (current - 1 + matches.length) % matches.length,
+        );
+        return true;
+      case "Tab":
+      case KEYBOARD_SHORTCUTS.SUBMIT:
+        // Enter commits the highlighted command instead of sending the raw
+        // text, matching every other completion menu.
+        e.preventDefault();
+        applyCommand(matches[selectedIndex]);
+        return true;
+      case KEYBOARD_SHORTCUTS.ABORT:
+        // Close the menu without letting Escape reach the abort handler.
+        e.preventDefault();
+        e.stopPropagation();
+        setDismissedQuery(slashQuery);
+        return true;
+      default:
+        return false;
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (handleMenuKeyDown(e)) {
+      return;
+    }
+
     // Permission mode toggle: Ctrl+Shift+M (all platforms)
     if (
       e.key === KEYBOARD_SHORTCUTS.PERMISSION_MODE_TOGGLE &&
@@ -206,73 +301,105 @@ export function ChatInput({
   const isStopShown = Boolean(isLoading && currentRequestId);
 
   return (
-    <ChatComposer
-      value={input}
-      onChange={onInputChange}
-      onSubmit={onSubmit}
-      onStop={onAbort}
-      isStopShown={isStopShown}
-      isDisabled={isLoading}
-      // The default composer textarea submits on Enter unconditionally. Supply
-      // our own so the configurable Enter behaviour and the Ctrl+Shift+M mode
-      // shortcut keep working, and so IME composition never submits early.
-      input={
-        <TextArea
-          ref={inputRef}
-          label="Message"
-          isLabelHidden
-          value={input}
-          onChange={onInputChange}
-          onKeyDown={handleKeyDown}
-          onCompositionStart={handleCompositionStart}
-          onCompositionEnd={handleCompositionEnd}
-          placeholder={
-            isLoading && currentRequestId ? "Processing..." : "Type message..."
-          }
-          rows={1}
-          isDisabled={isLoading}
-          width="100%"
+    <div className="chat-composer-anchor">
+      {isMenuOpen ? (
+        <SlashCommandMenu
+          matches={matches}
+          selectedIndex={selectedIndex}
+          onSelect={applyCommand}
+          onHoverIndex={setSelectedIndex}
+          listboxId={listboxId}
         />
-      }
-      // Keep an explicit textual send affordance: the label doubles as the
-      // active-mode indicator ("Plan" vs "Send"), which the default icon-only
-      // send button cannot convey.
-      sendButton={
-        isStopShown ? (
+      ) : null}
+      <ChatComposer
+        value={input}
+        onChange={handleInputChange}
+        onSubmit={onSubmit}
+        onStop={onAbort}
+        isStopShown={isStopShown}
+        isDisabled={isLoading}
+        // The default composer textarea submits on Enter unconditionally. Supply
+        // our own so the configurable Enter behaviour and the Ctrl+Shift+M mode
+        // shortcut keep working, and so IME composition never submits early.
+        input={
+          // The shell stacks the textarea and its highlight overlay; see
+          // ComposerHighlight for why colouring the textarea directly is not
+          // an option.
+          <div className="composer-input-shell">
+            <TextArea
+              ref={inputRef}
+              label="Message"
+              isLabelHidden
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              onCompositionStart={handleCompositionStart}
+              onCompositionEnd={handleCompositionEnd}
+              placeholder={
+                isLoading && currentRequestId
+                  ? "Processing..."
+                  : "Type message..."
+              }
+              rows={1}
+              isDisabled={isLoading}
+              width="100%"
+              // Expose the picker as a combobox so screen readers announce the
+              // highlighted command as the user arrows through it.
+              role="combobox"
+              aria-expanded={isMenuOpen}
+              aria-controls={isMenuOpen ? listboxId : undefined}
+              aria-activedescendant={
+                isMenuOpen ? slashOptionId(listboxId, selectedIndex) : undefined
+              }
+              aria-autocomplete="list"
+            />
+            <ComposerHighlight
+              textareaRef={inputRef}
+              value={input}
+              commands={commands}
+            />
+          </div>
+        }
+        // Keep an explicit textual send affordance: the label doubles as the
+        // active-mode indicator ("Plan" vs "Send"), which the default icon-only
+        // send button cannot convey.
+        sendButton={
+          isStopShown ? (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={onAbort}
+              label="Stop"
+              aria-label="Stop generating (ESC)"
+            />
+          ) : (
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={onSubmit}
+              isDisabled={!input.trim() || isLoading}
+              data-testid="send-button"
+              label={
+                isLoading ? "..." : permissionMode === "plan" ? "Plan" : "Send"
+              }
+            />
+          )
+        }
+        footerActions={
           <Button
-            type="button"
-            variant="destructive"
+            variant="ghost"
             size="sm"
-            onClick={onAbort}
-            label="Stop"
-            aria-label="Stop generating (ESC)"
-          />
-        ) : (
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            onClick={onSubmit}
-            isDisabled={!input.trim() || isLoading}
-            data-testid="send-button"
-            label={
-              isLoading ? "..." : permissionMode === "plan" ? "Plan" : "Send"
+            onClick={() =>
+              onPermissionModeChange(getNextPermissionMode(permissionMode))
             }
+            data-testid="permission-mode-toggle"
+            label={getPermissionModeIndicator(permissionMode)}
+            aria-label={`Current: ${getPermissionModeName(permissionMode)} - Click to cycle (Ctrl+Shift+M)`}
           />
-        )
-      }
-      footerActions={
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            onPermissionModeChange(getNextPermissionMode(permissionMode))
-          }
-          data-testid="permission-mode-toggle"
-          label={getPermissionModeIndicator(permissionMode)}
-          aria-label={`Current: ${getPermissionModeName(permissionMode)} - Click to cycle (Ctrl+Shift+M)`}
-        />
-      }
-    />
+        }
+      />
+    </div>
   );
 }
