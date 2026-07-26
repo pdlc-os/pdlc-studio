@@ -6,6 +6,9 @@ export const API_CONFIG = {
     PROJECTS: "/api/projects",
     HISTORIES: "/api/projects",
     CONVERSATIONS: "/api/projects",
+    DIRECTORIES: "/api/directories",
+    CREATE_PROJECT: "/api/projects/create",
+    CLONE_REPOSITORY: "/api/projects/clone",
   },
 } as const;
 
@@ -41,4 +44,23 @@ export const getConversationUrl = (
   sessionId: string,
 ) => {
   return `${API_CONFIG.ENDPOINTS.CONVERSATIONS}/${encodedProjectName}/histories/${sessionId}`;
+};
+
+// Helper function to browse directories. Omit `path` to start at the home
+// directory; the backend resolves that and returns the path it actually listed.
+export const getDirectoriesUrl = (path?: string) => {
+  if (!path) {
+    return API_CONFIG.ENDPOINTS.DIRECTORIES;
+  }
+  return `${API_CONFIG.ENDPOINTS.DIRECTORIES}?path=${encodeURIComponent(path)}`;
+};
+
+// Helper function to create a new project directory
+export const getCreateProjectUrl = () => {
+  return API_CONFIG.ENDPOINTS.CREATE_PROJECT;
+};
+
+// Helper function to clone a git repository
+export const getCloneRepositoryUrl = () => {
+  return API_CONFIG.ENDPOINTS.CLONE_REPOSITORY;
 };

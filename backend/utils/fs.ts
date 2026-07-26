@@ -87,6 +87,20 @@ export async function stat(path: string): Promise<FileStats> {
 }
 
 /**
+ * Create a directory.
+ *
+ * Not recursive by default: creating a project directory should fail loudly if
+ * the parent does not exist, rather than silently materialising a whole path
+ * the user never asked for.
+ */
+export async function mkdir(
+  path: string,
+  options?: { recursive?: boolean },
+): Promise<void> {
+  await fs.mkdir(path, { recursive: options?.recursive ?? false });
+}
+
+/**
  * Read directory entries
  */
 export async function* readDir(path: string): AsyncIterable<DirectoryEntry> {

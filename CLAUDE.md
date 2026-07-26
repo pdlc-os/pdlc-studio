@@ -39,6 +39,13 @@ lefthook run pre-commit
 - `POST /api/abort/:requestId` - Abort ongoing requests
 - `GET /api/projects/:encodedProjectName/histories` - Conversation histories
 - `GET /api/projects/:encodedProjectName/histories/:sessionId` - Specific conversation history
+- `GET /api/directories?path=` - List subdirectories for the launch screen's folder picker. Omit `path` to list the home directory; `~` is expanded. Read-only, directories only, dot-directories hidden.
+- `POST /api/projects/create` - Create a project directory (`{ parentPath, name, initGit? }`) → `{ path }`
+- `POST /api/projects/clone` - `git clone` into a directory (`{ url, parentPath, name? }`) → `{ path }`
+
+The `create` and `clone` routes are registered **before** the parameterised
+`/api/projects/:encodedProjectName/...` routes, so "create" and "clone" are not
+captured as project names.
 
 ### Frontend (React)
 
@@ -47,6 +54,43 @@ lefthook run pre-commit
 - **Purpose**: Project selection and chat interface with streaming responses
 
 **Key Features**: Project directory selection, routing system, conversation history, demo mode, real-time streaming, theme toggle, auto-scroll, accessibility features, modular hook architecture, request abort functionality, permission dialog handling, configurable Enter key behavior.
+
+#### Launch screen (`/`)
+
+`ProjectSelector` renders an Xcode-style launch window: one rounded panel split
+60/40, app identity and actions on the left, Recent Projects on the right.
+
+All three actions funnel into the same place — a directory path that gets opened
+as a project:
+
+| Action                   | Flow                                                                                                                 |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Create New Project...    | `NewProjectDialog` → pick a parent via the folder picker, name it, optional `git init` → `POST /api/projects/create` |
+| Clone Git Repository...  | `CloneRepositoryDialog` → remote URL + parent directory → `POST /api/projects/clone`                                 |
+| Open Existing Project... | `DirectoryPickerDialog` directly                                                                                     |
+
+`DirectoryPickerDialog` is shared by all three. **The selection is always the
+directory currently being browsed**, matching native folder pickers: navigate
+into the folder you want, then confirm. That avoids a separate
+selected-vs-open state per row.
+
+**Recent Projects comes from `~/.claude.json`** and only lists directories that
+already have conversation history, so a newly created or cloned directory will
+not appear there until it has been used. Opening it still works — the list is
+just not the only way in any more, which was the point of this screen.
+
+The version string is injected at build time by `vite.config.ts` reading
+`backend/package.json` (exposed as `__APP_VERSION__`, declared in
+`src/vite-env.d.ts`). `frontend/package.json` stays at `0.0.0` and is not the
+release version.
+
+Layout chrome lives in the `.launch-*` classes in `src/index.css` because Astryx
+has no split-panel or grid primitive and `Card` cannot clip a child's background
+to its own rounded corners. Everything inside is composed from Astryx
+components. Two token gotchas are documented inline there: `--radius-xl` does
+not exist (`--radius-page` does), and `--color-background-muted` is defined
+identically to `--color-background-body` in theme-neutral, so it yields no
+contrast.
 
 ### Design System (Astryx)
 

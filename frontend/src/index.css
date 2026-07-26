@@ -110,3 +110,122 @@ body,
 .demo-emphasis-accent {
   box-shadow: 0 0 0 2px var(--color-border-blue);
 }
+
+/*
+ * Launch window (the "/" route).
+ *
+ * Modelled on Xcode's launch panel: a single rounded rectangle split 60/40,
+ * actions on the left, recent projects on the right. Astryx has no split-panel
+ * or grid primitive, and Card cannot clip a child's background to its own
+ * rounded corners, so the chrome lives here. Everything inside is composed from
+ * Astryx components; these rules only lay out the shell and are built entirely
+ * from Astryx tokens.
+ */
+.launch-viewport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: var(--spacing-4);
+  background-color: var(--color-background-body);
+}
+
+.launch-panel {
+  display: grid;
+  /* The 60/40 split the design calls for. */
+  grid-template-columns: 60% 40%;
+  width: 100%;
+  max-width: 60rem;
+  min-height: 30rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-page);
+  background-color: var(--color-background-card);
+  /* Clips the aside's background to the rounded corners. */
+  overflow: hidden;
+}
+
+/* Stack on narrow viewports; the recent list moves below the actions. */
+@media (max-width: 720px) {
+  .launch-panel {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+}
+
+.launch-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-6);
+  padding: var(--spacing-8) var(--spacing-6);
+}
+
+.launch-aside {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /*
+   * Separating the two panes needs a tone that differs from the panel in BOTH
+   * schemes, and no single token does: theme-neutral defines
+   * --color-background-muted identically to --color-background-body, and
+   * --color-background-surface matches --color-background-card in light mode.
+   * So pick per scheme — body is greyer than the white card in light, surface
+   * is lighter than the near-black card in dark. light-dark() is the same
+   * mechanism the theme itself uses, and both values stay Astryx tokens.
+   */
+  background-color: light-dark(
+    var(--color-background-body),
+    var(--color-background-surface)
+  );
+  border-inline-start: 1px solid var(--color-border);
+}
+
+@media (max-width: 720px) {
+  .launch-aside {
+    border-inline-start: none;
+    border-block-start: 1px solid var(--color-border);
+  }
+}
+
+/* Only the recent-projects list scrolls, so the panel keeps its shape. */
+.launch-aside-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/*
+ * App mark. There is no logo asset, so this is a rounded tile holding a
+ * semantic icon — the same silhouette as a macOS app icon.
+ */
+.launch-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: var(--radius-page);
+  background-color: var(--color-background-blue);
+  color: var(--color-text-blue);
+  border: 1px solid var(--color-border-blue);
+}
+
+/* Full-width action buttons, as in the reference. */
+.launch-actions {
+  width: 100%;
+  max-width: 26rem;
+}
+
+/*
+ * Left-align icon and label inside the action buttons. Astryx centres button
+ * content, but the reference puts the icon hard against the left edge with the
+ * label beside it, which is what makes the three rows scan as a menu. Targets
+ * `astryx-button`, the component class Astryx documents for theming, rather
+ * than a generated StyleX class.
+ */
+.launch-actions .astryx-button {
+  justify-content: flex-start;
+  gap: var(--spacing-3);
+  padding-inline-start: var(--spacing-4);
+}
