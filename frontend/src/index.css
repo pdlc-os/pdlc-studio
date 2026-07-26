@@ -196,19 +196,14 @@ body,
 }
 
 /*
- * App mark. There is no logo asset, so this is a rounded tile holding a
- * semantic icon — the same silhouette as a macOS app icon.
+ * App mark. Purely a centring box: AppIcon supplies its own tile background,
+ * corner radius and fixed colours, so it renders identically in both schemes
+ * and must not inherit a background or text colour from here.
  */
 .launch-logo {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 5.5rem;
-  height: 5.5rem;
-  border-radius: var(--radius-page);
-  background-color: var(--color-background-blue);
-  color: var(--color-text-blue);
-  border: 1px solid var(--color-border-blue);
 }
 
 /* Full-width action buttons, as in the reference. */
