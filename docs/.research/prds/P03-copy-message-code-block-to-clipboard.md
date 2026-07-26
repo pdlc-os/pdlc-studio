@@ -8,10 +8,10 @@
 | **Category** | Chat & Streaming Experience |
 | **Matrix features** | `CHAT-10` (copy message / code to clipboard) |
 | **Maturity** | PDLC Studio UNVERIFIED, assumed **0–1** → target **4** · claudecodeui UNVERIFIED |
-| **Effort** | **1** |
+| **Effort** | **1** — **revised down after Astryx investigation; see §2.1** |
 | **Depends on** | Nothing |
 | **Blocks** | Nothing |
-| **Status** | Proposed — **verify current state before starting** (see §2.1) |
+| **Status** | Proposed — scope reduced, block-level copy already ships |
 
 ---
 
@@ -22,24 +22,44 @@ for a command, a config block, a regex, or a snippet, and then needs it somewher
 terminal, a file, a message to a colleague.
 
 PDLC Studio renders assistant text through the Astryx `Markdown` component and long output
-through `CodeBlock` with `isCollapsible` truncation (`CLAUDE.md`, "Chat UI"). Whether either
-provides a copy affordance **depends on Astryx's own component behaviour**, which this
-research pack could not verify — the design system's internals were not in scope.
+through `CodeBlock` (`CLAUDE.md`, "Chat UI").
 
 The reach is the point. This is not a power-user feature; it is something nearly every user
 does in nearly every session. Combined with effort 1, that is what puts a modest
 value-3 feature at rank 3.
 
-### 1.1 The `isCollapsible` interaction
+### 1.1 What the Astryx investigation found — and one correction
 
-There is a specific failure mode worth calling out. `CodeBlock` truncates long output
-behind `isCollapsible`. If a copy affordance exists but copies only the *rendered* text,
-then copying a collapsed block yields truncated content — silently. A user pastes what looks
-like a complete file and gets half of it with no error.
+This PRD was originally written assuming Astryx provided nothing, and flagged a
+"collapsed blocks copy truncated content" trap as its highest risk. **Querying the Astryx
+design system directly showed both assumptions were wrong.** Recording the correction here
+rather than silently rewriting, because it materially changes the scope:
 
-Any copy implementation **must** copy the full underlying source, not the visible DOM text.
-This is the single most important requirement in this PRD and the one most likely to be
-missed.
+**`CodeBlock` already ships a copy button.**
+
+| Prop | Type | Default | Relevance |
+| --- | --- | --- | --- |
+| `hasCopyButton` | `boolean` | **`true`** | Block-level copy is already on, everywhere |
+| `onCopy` | `() => void` | — | Callback after copy |
+| `code` | `string` | required | **What gets copied** |
+
+The Astryx docs describe the copy button as *"Copies the **code string** to the
+clipboard"* — that is the `code` **prop**, not the rendered DOM. So the truncation trap
+does not exist: copying a collapsed block yields the full source by construction.
+
+**`isCollapsible` is also not truncation.** Astryx defines it as *"Allow collapsing the code
+body into just the header bar. Starts expanded"*, gated by `collapsibleThreshold`
+(default 10 lines). `CLAUDE.md`'s shorthand — "long output through `CodeBlock`
+(`isCollapsible` handles truncation)" — is loose phrasing for a collapse toggle. Worth
+correcting in `CLAUDE.md` while here.
+
+**Consequence for scope**: FR-1 through FR-5 are already satisfied by the design system.
+**The remaining work is message-level copy (FR-6 to FR-8) plus verification.** Effort drops
+from ~12 h to roughly 5 h. §17 reflects this.
+
+This is exactly the outcome `CLAUDE.md` warns about when it directs preferring the
+purpose-built Chat group over hand-rolled equivalents — building a parallel copy button
+would have duplicated a shipped one and produced two inconsistent affordances.
 
 ---
 
@@ -56,28 +76,28 @@ default, so it presumably implements its own — but this was not confirmed.
 clipboard is a baseline expectation in every chat product, and its absence is noticed
 immediately.
 
-### 2.1 Required first step
+### 2.1 Astryx investigation — completed
 
-Before any implementation, **verify what Astryx already provides**:
+Resolved against the Astryx design system (see §1.1). Outcome:
+
+| Question | Answer |
+| --- | --- |
+| Does `CodeBlock` provide copy? | **Yes** — `hasCopyButton`, default `true` |
+| Does it copy full source or rendered text? | **Full source** (the `code` prop) |
+| Is there a post-copy hook? | Yes — `onCopy` |
+| Does `Markdown` provide message-level copy? | **Not established** — remains the open item |
+
+**Do not build a parallel block-level copy affordance.** `CLAUDE.md` explicitly directs
+preferring the purpose-built Chat group over hand-rolled equivalents, and a second copy
+button next to Astryx's would be visibly wrong.
+
+The one remaining discovery task is whether `Markdown` or `ChatMessage` expose anything for
+message-level copy:
 
 ```bash
-npx @astryxdesign/cli component CodeBlock
 npx @astryxdesign/cli component Markdown
 npx @astryxdesign/cli component ChatMessage
 ```
-
-`CLAUDE.md` is explicit that component APIs should be discovered via the CLI rather than
-guessed. Three outcomes:
-
-| Finding | Consequence |
-| --- | --- |
-| `CodeBlock` has a built-in copy affordance | Scope shrinks to message-level copy plus verifying the `isCollapsible` interaction. Possibly a 2-hour task. |
-| It has a prop to enable one | Scope shrinks to enabling it and covering it with tests. |
-| It has none | Full scope as specified below. |
-
-The PRD is written for the third case. **Do not build a parallel copy affordance if Astryx
-already ships one** — `CLAUDE.md` explicitly directs preferring the purpose-built Chat group
-over hand-rolled equivalents.
 
 ---
 
@@ -130,17 +150,22 @@ awkward.
 
 ## 5. Functional requirements
 
-### Code block copy
+### Code block copy — **satisfied by Astryx; verify, do not build**
 
 - **FR-1** Every rendered code block **MUST** expose a copy control.
-- **FR-2** It **MUST** copy the block's **complete source**, including any content hidden by
-  `isCollapsible` (see §1.1).
-- **FR-3** Copied content **MUST NOT** include the language label, line numbers, or any
-  rendering chrome.
-- **FR-4** Trailing whitespace **MUST** be preserved exactly; a single trailing newline
-  **SHOULD** be normalised to avoid pasting a stray blank line.
-- **FR-5** The control **MUST** be visible on keyboard focus, not only on hover — a
-  hover-only control is unreachable by keyboard and invisible on touch.
+  *Satisfied by `CodeBlock`'s `hasCopyButton` default. Requirement is to **not disable** it.*
+- **FR-2** It **MUST** copy the block's **complete source**.
+  *Satisfied by construction — Astryx copies the `code` prop, not the DOM.*
+- **FR-3** Copied content **MUST NOT** include the language label, line numbers, or chrome.
+  *Satisfied by construction, same reason. **Verify with a test** rather than assume.*
+- **FR-4** Trailing whitespace **MUST** be preserved exactly.
+  *Depends on what the app passes as `code`. The extraction path is ours, so this is still
+  our requirement.*
+- **FR-5** The control **MUST** be visible on keyboard focus, not only on hover.
+  *Astryx's behaviour here is unverified — **check on a real render**, especially on touch.*
+
+The net requirement for this group is: **confirm `hasCopyButton` is not being disabled
+anywhere, confirm the `code` prop carries complete source, and cover both with tests.**
 
 ### Message copy
 
@@ -412,13 +437,14 @@ independently of every other PRD.
 
 | # | Risk | Likelihood | Impact | Mitigation |
 | --- | --- | --- | --- | --- |
-| 1 | **Copy captures rendered text, silently truncating collapsed blocks** | **High** | **High** | FR-2; copy from message data not DOM (§7.3); dedicated test |
-| 2 | Astryx `Markdown` offers no per-code-block render hook, making FR-1 much harder | **Medium** | **High** | Discovery step in §2.1 **before** committing. Fallback: message-level copy only, ship FR-1 later. |
-| 3 | Astryx already ships a copy affordance; work is duplicated | Medium | Medium | §2.1 discovery; `CLAUDE.md` explicitly forbids hand-rolled equivalents |
-| 4 | Hover-only control invisible on touch | Medium | Medium | FR-5 and the visibility table; explicit narrow-viewport check |
-| 5 | Clipboard API unavailable over plain HTTP on a LAN | **Medium** | Medium | FR-12 graceful failure; document in README network section |
-| 6 | Timer fires after unmount | Medium | Low | Cleanup + test |
-| 7 | Control interferes with text selection | Low | Medium | Placement outside the content flow; manual check |
+| 1 | ~~Copy captures rendered text, truncating collapsed blocks~~ | — | — | **Retired.** §1.1: Astryx copies the `code` prop, not the DOM. |
+| 2 | ~~Astryx offers no per-block copy, making FR-1 hard~~ | — | — | **Retired.** `hasCopyButton` ships by default. |
+| 3 | **The `code` prop is passed truncated content by the app** | Medium | **High** | The extraction path is ours (§7.3). Astryx copies faithfully whatever it is given — so a bug here is now *our* bug, not the design system's. Test with a long file. |
+| 4 | A second, hand-rolled copy button appears next to Astryx's | **Medium** | Medium | §2.1; explicit acceptance criterion |
+| 5 | Astryx's copy button is hover-only and invisible on touch | Medium | Medium | FR-5 unverified — check on a real narrow-viewport render before assuming |
+| 6 | Clipboard API unavailable over plain HTTP on a LAN | **Medium** | Medium | FR-12 graceful failure; document in README network section. **Note this affects Astryx's button too**, so the failure mode must be checked, not just ours. |
+| 7 | Timer fires after unmount (message-level control) | Medium | Low | Cleanup + test |
+| 8 | Control interferes with text selection | Low | Medium | Placement outside the content flow; manual check |
 
 ---
 
@@ -462,21 +488,23 @@ independently of every other PRD.
 
 ## 17. Effort breakdown
 
-Assuming Astryx provides nothing built-in (worst case):
+**Revised after the Astryx investigation (§1.1).** Block-level copy is already shipped, so
+the estimate drops from the original ≈12 h:
 
 | Task | Estimate |
 | --- | --- |
-| Astryx discovery (§2.1) | 1 h |
+| Confirm `hasCopyButton` not disabled; audit `code` prop for completeness | 1 h |
+| Remaining discovery: `Markdown` / `ChatMessage` message-level copy (§2.1) | 0.5 h |
 | `useCopyToClipboard` hook | 1.5 h |
-| `CopyButton` component | 1.5 h |
-| Wiring block-level copy incl. source extraction | 2.5 h |
+| `CopyButton` component (message level only) | 1.5 h |
 | Wiring message-level copy | 1 h |
 | Clipboard mock in test setup | 0.5 h |
-| Tests | 3 h |
-| Manual verification incl. touch and HTTP cases | 1 h |
-| **Total** | **≈12 h — 1.5–2 days** |
+| Tests | 2 h |
+| Manual verification incl. touch and plain-HTTP cases | 1 h |
+| **Total** | **≈9 h — just over 1 day** |
 
-If Astryx ships copy on `CodeBlock`, this drops to roughly **4 hours**.
+Effort stays **1** on the pack's scale. If `Markdown` turns out to provide message-level
+copy too, this drops to roughly **3 hours** of verification and tests.
 
 ---
 

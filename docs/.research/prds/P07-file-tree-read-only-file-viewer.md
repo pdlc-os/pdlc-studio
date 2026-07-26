@@ -342,27 +342,73 @@ and will pass tests under one runtime while breaking the other.
 
 | Component | Purpose |
 | --- | --- |
-| New `frontend/src/components/files/FileTree.tsx` | ARIA tree, lazy expansion |
-| New `frontend/src/components/files/FileTreeNode.tsx` | One node |
-| New `frontend/src/components/files/FileViewer.tsx` | Content render — **reused by P16, P19** |
+| New `frontend/src/components/files/FileTree.tsx` | Thin wrapper over Astryx `TreeList` |
+| New `frontend/src/components/files/FileViewer.tsx` | Wraps `CodeBlock` — **reused by P16, P19** |
 | New `frontend/src/components/files/FilePanel.tsx` | Panel shell + collapse |
 | New `frontend/src/hooks/files/useFileTree.ts` | Tree state, lazy loading, caching |
 | New `frontend/src/hooks/files/useFileContent.ts` | Fetch + cache file contents |
 | Modify `frontend/src/components/ChatPage.tsx` | Mount the panel |
+
+### 7.6a Astryx `TreeList` — and the one real tension
+
+**Astryx ships `TreeList`, documented explicitly for file explorers**, with a `startContent`
+slot for folder/document icons and branch connector lines. There is also a `useTreeFocus`
+hook implementing the **full WAI-ARIA tree keyboard model**: `↑`/`↓`/`Home`/`End` roam
+visible treeitems skipping disabled ones, `→`/`←` carry expand/collapse and
+first-child/parent semantics, `Enter`/`Space` activate, and printable characters trigger
+typeahead.
+
+**This removes almost all of FR-22 and FR-23's work.** Hand-rolling an ARIA tree was the
+largest single risk in the original estimate and it is now a wrapper job.
+
+**But there is a genuine conflict with FR-2 (lazy loading).** Astryx documents `TreeList` as
+taking a complete recursive `items: TreeListItemData[]` array, with *"Expansion state is
+managed internally"* — and the published prop list exposes **no `onExpand` callback**. Lazy
+loading needs exactly that signal: "this node just opened, go fetch its children."
+
+Three ways out, in order of preference:
+
+1. **Check for an unpublished expansion callback.** The prop list may be abridged; inspect
+   `TreeListItemData` and the component's types directly before designing around the gap.
+2. **Fetch on `onClick` of directory nodes.** `TreeListItemData` does carry `onClick` (the
+   Astryx example uses it on leaves). If a directory's `onClick` fires alongside internal
+   expansion, that is the hook — populate `children` and let the component re-render.
+3. **Depth-limited eager loading.** Fetch two or three levels at once and load deeper on
+   demand. Weakens FR-2 but stays within the component's contract.
+
+**Option 3 is the fallback that must not be chosen silently** — on a repo with
+`node_modules`, eager loading is exactly the FR-5 hazard. If neither 1 nor 2 works,
+FR-2's lazy requirement and Astryx `TreeList` are in real conflict, and the choice is between
+a custom tree built on `useTreeFocus` (keeping the ARIA work) or accepting depth limits.
+
+Note also Astryx's own guidance against nesting *"more than 4–5 levels deep"*. Source trees
+routinely exceed that. Worth checking how the component behaves at depth 8 before committing.
 
 **Syntax highlighting** must come from Astryx's `CodeBlock`, which already renders
 highlighted code in the transcript (`CLAUDE.md`, "Chat UI"). Adding a second highlighting
 library would be a direct violation of the design-system rule and would ship two syntax
 themes that drift apart.
 
-Confirm before building whether `CodeBlock` supports line numbers (FR-13) and
-line-anchoring (FR-14):
+**Astryx investigation — completed.** `CodeBlock` covers the viewer's requirements outright:
 
-```bash
-npx @astryxdesign/cli component CodeBlock
-```
+| Requirement | Astryx prop | Status |
+| --- | --- | --- |
+| FR-13 line numbers | `hasLineNumbers: boolean` (default `false`) | **Satisfied** |
+| FR-14 line anchoring | `highlightLines: number[]` (1-indexed) | **Satisfied** |
+| FR-9 highlighting | `language: string` | **Satisfied** |
+| FR-10 plain-text fallback | `language="plaintext"` | **Satisfied** |
+| FR-12 scroll bounding | `maxHeight: number \| string` | **Satisfied** |
+| Filename header | `title: string` | Bonus — use it |
+| Copy the file | `hasCopyButton` (default `true`) | Bonus — P03 for free |
+| Unsupported languages | `tokenizer` override | Escape hatch |
+| Full-width layout | `width="100%"` (default is `fit-content`) | **Must set explicitly** |
+| Embedded presentation | `container="section"` | Use inside the panel |
 
-If it does not, FR-13/14 need a thin wrapper — **not** a different renderer.
+Two things to note. `width` defaults to `fit-content`, which is wrong for a file viewer and
+must be set to `100%`. And `container="section"` drops the border and radius so the block
+blends into the panel rather than looking like a card inside a card.
+
+**Open question 2 in §16 is resolved by this table.**
 
 ### 7.7 Reuse
 
@@ -371,8 +417,10 @@ If it does not, FR-13/14 need a thin wrapper — **not** a different renderer.
 | Path resolution + tests | `paths.ts` / `paths.test.ts` | `backend/utils/` |
 | fs primitives | `exists`, `readDir`, `stat` | `backend/utils/fs.ts` |
 | Runtime abstraction | `Runtime` interface | `backend/runtime/types.ts` |
-| Highlighted code render | Astryx `CodeBlock` | design system |
-| Panel/disclosure primitives | Astryx | design system |
+| **Tree rendering** | **Astryx `TreeList`** | design system |
+| **ARIA tree keyboard model** | **Astryx `useTreeFocus`** | design system |
+| **Highlighted code render** | **Astryx `CodeBlock`** | design system |
+| Panel/disclosure primitives | Astryx `Collapsible` | design system |
 | Encoded project name | `getEncodedProjectName` | `backend/history/pathUtils.ts` |
 | Settings persistence | `useSettings` | `frontend/src/hooks/useSettings.ts` |
 
@@ -568,10 +616,13 @@ Per `CLAUDE.md`, assert on roles and `aria-*` — never StyleX class names.
 | 3 | Huge file read fully into memory before truncation | Medium | High | `stat` first; bounded read; explicit test |
 | 4 | `node_modules` expansion hangs the UI | **High** if unhandled | Medium | FR-5; listing caps |
 | 5 | Runtime abstraction implemented for Deno only | **Medium** | High | §7.5; parity tests under both runtimes |
-| 6 | A second syntax-highlighting library gets introduced | Medium | Medium | Astryx `CodeBlock` only; `CLAUDE.md` design-system rule |
+| 6 | A second syntax-highlighting library gets introduced | Low | Medium | `CodeBlock` covers every viewer requirement (§7.6); `CLAUDE.md` design-system rule |
 | 7 | Panel becomes a de facto IDE and erodes the single-surface identity | Medium | Medium | §6 decision; collapsed by default; no tabs, no route |
 | 8 | Adds read surface to an unauthenticated API | **Certain** | Medium | Acknowledged in §9; argues for P14, not against P07 |
-| 9 | ARIA tree implemented approximately | Medium | Medium | Full pattern in FR-23 with tests |
+| 9 | ~~ARIA tree implemented approximately~~ | — | — | **Retired.** `useTreeFocus` implements the full WAI-ARIA tree model. |
+| 10 | **`TreeList` cannot lazy-load, forcing eager fetches** | **Medium** | **High** | §7.6a three options; **option 3 (depth-limited eager) must not be chosen silently** — on a repo with `node_modules` it is the FR-5 hazard |
+| 11 | `TreeList` degrades beyond 4–5 nesting levels | Medium | Medium | §16.2b; check at depth 8 before committing |
+| 12 | `CodeBlock` left at default `width: fit-content` in the viewer | Medium | Low | §7.6 — must set `width="100%"` and `container="section"` |
 
 ---
 
@@ -606,8 +657,14 @@ Per `CLAUDE.md`, assert on roles and `aria-*` — never StyleX class names.
 
 1. **New endpoint or a flag on `/api/directories`?** §7.1 recommends new, on security-contract
    grounds. Confirm before starting — it shapes four downstream PRDs.
-2. **Does Astryx `CodeBlock` support line numbers and line anchoring?** Blocking for FR-13
-   and FR-14. Resolve with the Astryx CLI first.
+2. ~~Does Astryx `CodeBlock` support line numbers and line anchoring?~~ **Resolved** — yes,
+   via `hasLineNumbers` and `highlightLines`. See the table in §7.6.
+2a. **Can Astryx `TreeList` support lazy loading?** This replaces the question above as the
+   blocking one. `TreeList` manages expansion internally and publishes no `onExpand`
+   callback, which conflicts with FR-2. §7.6a sets out three options; resolve before
+   estimating the frontend work. **This is now the single largest scoping risk in the PRD.**
+2b. **How does `TreeList` behave beyond its recommended 4–5 nesting levels?** Source trees
+   routinely go deeper. Check before committing.
 3. **What is the right size threshold?** 1 MB is suggested. Too low frustrates on large
    source files; too high risks memory pressure.
 4. **Should the panel remember the last-viewed file** across reloads? Convenient, but a
@@ -621,26 +678,31 @@ Per `CLAUDE.md`, assert on roles and `aria-*` — never StyleX class names.
 
 ## 17. Effort breakdown
 
-| Task | Estimate |
-| --- | --- |
-| `resolveWithinRoot` + comprehensive tests | 4 h |
-| Tree endpoint | 3 h |
-| File content endpoint incl. binary + truncation | 4 h |
-| Runtime interface extension, both implementations | 3 h |
-| Shared types | 1 h |
-| `useFileTree` hook incl. lazy load + cache | 4 h |
-| `useFileContent` hook | 2 h |
-| `FileTree` + `FileTreeNode` with full ARIA | 6 h |
-| `FileViewer` | 4 h |
-| `FilePanel` shell, collapse, responsive overlay | 3 h |
-| `ChatPage` integration + settings persistence | 2 h |
-| Backend tests | 5 h |
-| Frontend tests | 6 h |
-| Manual verification incl. both runtimes | 3 h |
-| **Total** | **≈50 h — 6–7 days** |
+**Revised after the Astryx investigation** (§7.6, §7.6a). `TreeList`, `useTreeFocus` and
+`CodeBlock` remove most of the frontend rendering and all of the ARIA work:
 
-Effort 3 ("1–2 weeks") is accurate. Roughly a third is security-critical path handling and
-its tests, which should not be compressed.
+| Task | Estimate | Change |
+| --- | --- | --- |
+| **Resolve the `TreeList` lazy-loading question (§7.6a)** | 3 h | **new, blocking** |
+| `resolveWithinRoot` + comprehensive tests | 4 h | — |
+| Tree endpoint | 3 h | — |
+| File content endpoint incl. binary + truncation | 4 h | — |
+| Runtime interface extension, both implementations | 3 h | — |
+| Shared types | 1 h | — |
+| `useFileTree` hook incl. lazy load + cache | 4 h | — |
+| `useFileContent` hook | 2 h | — |
+| `FileTree` wrapper over `TreeList` | **2 h** | was 6 h (ARIA now free) |
+| `FileViewer` wrapper over `CodeBlock` | **1.5 h** | was 4 h |
+| `FilePanel` shell, collapse, responsive overlay | 3 h | — |
+| `ChatPage` integration + settings persistence | 2 h | — |
+| Backend tests | 5 h | — |
+| Frontend tests | **4 h** | was 6 h (less bespoke behaviour to cover) |
+| Manual verification incl. both runtimes and tree depth | 3 h | — |
+| **Total** | **≈44.5 h — 5–6 days** | was ≈50 h |
+
+Effort stays **3**. The saving is smaller than the component reuse suggests because the
+blocking `TreeList` investigation partly offsets it — and because the security-critical path
+handling, which is roughly a third of the work, is unchanged and must not be compressed.
 
 ---
 
