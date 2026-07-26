@@ -3,7 +3,7 @@
   against GitHub's light and dark themes without a picture/prefers-color-scheme
   swap.
 -->
-<img src="docs/images/icon.svg" alt="" width="96" height="96" align="left" hspace="20" />
+<img src="docs/images/pdlc-studio-mark.svg" alt="" width="96" height="96" align="left" hspace="20" />
 
 # PDLC Studio
 

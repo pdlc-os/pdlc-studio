@@ -12,9 +12,10 @@ interface AppIconProps {
 /**
  * PDLC Studio app mark.
  *
- * Inlined rather than loaded from `/icon.svg` so it inherits the surrounding
- * layout and cannot flash in late on a cold load. The same artwork is also in
- * `public/icon.svg`, which serves the favicon — keep the two paths in sync.
+ * Inlined rather than loaded from `/pdlc-studio-mark.svg` so it inherits the
+ * surrounding layout and cannot flash in late on a cold load. The same
+ * artwork is also in `public/pdlc-studio-mark.svg`, which serves the favicon —
+ * keep the two paths in sync.
  *
  * The mark is deliberately **not** theme-reactive: it carries its own tile
  * background, so it renders identically in light and dark mode the way an OS
