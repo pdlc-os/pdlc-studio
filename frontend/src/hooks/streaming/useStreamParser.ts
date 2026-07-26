@@ -17,6 +17,32 @@ import {
   type ProcessingContext,
 } from "../../utils/UnifiedMessageProcessor";
 
+/**
+ * Top-level SDK message types the UI deliberately does not render.
+ *
+ * The Agent SDK's message union is far wider than the four types this app
+ * displays, and some of the rest arrive on essentially every request —
+ * `rate_limit_event` is emitted once per turn. Treating those as "unknown"
+ * logged a line to the browser console per request, which buried anything
+ * worth reading.
+ *
+ * Distinct from `NON_DISPLAYED_SYSTEM_SUBTYPES` in UnifiedMessageProcessor:
+ * that filters `subtype` within `type: "system"`, this filters the top-level
+ * `type`.
+ */
+const IGNORED_SDK_MESSAGE_TYPES: ReadonlySet<string> = new Set([
+  "rate_limit_event",
+]);
+
+/**
+ * Types already reported as unknown, so each is logged once per page load
+ * rather than once per occurrence.
+ *
+ * Module-level on purpose: the dedupe should span every consumer of this hook,
+ * and it is diagnostics only — nothing reads it back.
+ */
+const reportedUnknownTypes = new Set<string>();
+
 export function useStreamParser() {
   // Create a single unified processor instance
   const processor = useMemo(() => new UnifiedMessageProcessor(), []);
@@ -80,9 +106,23 @@ export function useStreamParser() {
             return;
           }
           break;
-        default:
-          console.log("Unknown Claude message type:", claudeData);
+        default: {
+          const { type } = claudeData as { type: string };
+          // Expected traffic the UI has no rendering for — stay quiet.
+          if (IGNORED_SDK_MESSAGE_TYPES.has(type)) {
+            return;
+          }
+          // Genuinely unrecognised: the UI is dropping a message, which is
+          // worth surfacing — but once per type, not once per occurrence.
+          if (!reportedUnknownTypes.has(type)) {
+            reportedUnknownTypes.add(type);
+            console.warn(
+              `Unhandled Claude message type "${type}" — dropping it. Add it to IGNORED_SDK_MESSAGE_TYPES if that is expected.`,
+              claudeData,
+            );
+          }
           return;
+        }
       }
 
       // Process the message using the unified processor
