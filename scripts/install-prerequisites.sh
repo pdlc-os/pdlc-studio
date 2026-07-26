@@ -43,7 +43,7 @@ case "$(uname -s)" in
   Darwin) OS=macos ;;
   Linux)  OS=linux ;;
   *)
-    fail "Unsupported platform: $(uname -s). On Windows use scripts/install-prerequisites.ps1."
+    fail "Unsupported platform: $(uname -s). PDLC Studio supports macOS and Linux only."
     exit 1
     ;;
 esac

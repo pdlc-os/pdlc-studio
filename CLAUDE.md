@@ -386,7 +386,21 @@ cd backend && deno task build  # Local building
 ```
 
 **Automated**: see [Release Process](#release-process) — GitHub Actions builds
-Linux (x64/arm64), macOS (x64/arm64) and Windows (x64).
+Linux (x64/arm64) and macOS (x64/arm64). Windows is not supported.
+
+The release build installs backend dependencies with
+`npm ci --omit=dev --omit=optional` and compiles with
+`--node-modules-dir=manual --no-check`. Both omissions matter: `deno compile`
+embeds the whole `node_modules` tree, so devDependencies and the ~245 MB
+platform-specific `@anthropic-ai/claude-agent-sdk-<platform>` package would
+otherwise ship inside every binary. That package is a full Claude Code native
+executable this app never runs, because `chat.ts` passes an explicit
+`pathToClaudeCodeExecutable`. macOS arm64 went from 428 MB to 94 MB, and to
+38 MB once packaged as a compressed disk image.
+
+`--no-check` is required because dropping devDependencies removes
+`@types/node`, which a JSR dependency needs to resolve types. Types are already
+checked by `make check` on every PR.
 
 ## Claude Agent SDK Dependency Management
 
