@@ -425,8 +425,16 @@ stars, and four provider integrations. A ~6k-line project with a 38 MB binary an
 is a feature. `bypassPermissions` + zero authentication + a README that shows
 `--host 0.0.0.0` is a live hazard, and claudecodeui's inverse default (tools disabled,
 JWT + bcrypt, authenticated WebSocket) demonstrates the alternative is entirely
-practical. This is why security-class items dominate the top of the ranking even under a
-value÷effort model rather than a security-first one — they score well on *both* axes.
+practical.
+
+Worth separating two things that get conflated, because the ranking treats them very
+differently. **Changing the default permission mode** is close to free — two constants and
+a persistence fix — and it ranks **P01** by a wide margin. **Building authentication** is a
+real project, and under the value÷effort model the user chose it lands at **P14**, because
+a localhost-only user gets friction rather than benefit from a login screen. That is an
+honest output of the model, not an oversight; `06-prioritization-and-roadmap.md` §5 shows
+where authentication moves to under a security-first lens instead, so the choice stays
+visible rather than buried in a weighting.
 
 **3. The two leads must be protected, not traded away.** Astryx and the test suite are why
 PDLC Studio is pleasant to work on. Several otherwise-attractive features — an embedded
