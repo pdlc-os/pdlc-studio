@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PDLC Studio app mark — small size.
+
+  Canonical source: brand/pdlc-studio-mark-small.svg. Edit it there, then run
+  `make sync-brand`; it is copied to frontend/public/pdlc-studio-favicon.svg.
+  AppIcon.test.tsx fails if the copies drift.
+
+  ── Not a second mark ─────────────────────────────────────────────────────────
+  This is the same identity as pdlc-studio-mark.svg, drawn again for small
+  sizes — an optical size, in the sense a type foundry means it. The display
+  mark carries 22 dots plus a glyph, which is more detail than a 16px favicon
+  has pixels for; it reduces to a coloured smudge. Here the ring is dropped and
+  the prompt grows to fill the tile.
+
+  Used below roughly 32px: the browser favicon, the chat header, the demo
+  header. See SMALL_SIZE_THRESHOLD in AppIcon.tsx.
+
+  ── Why the tile stays dark ───────────────────────────────────────────────────
+  The gradient moves onto the glyph rather than the tile so this reads as the
+  same product as the display mark at a glance. Putting the sweep on the tile
+  instead is louder and works well on its own, but next to a dark-tiled mark it
+  looks like a different app — which is exactly what a favicon must not do.
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 512 512"
+  width="512"
+  height="512"
+  role="img"
+  aria-label="PDLC Studio"
+>
+  <defs>
+    <linearGradient
+      id="pdlc-sweep-small"
+      gradientUnits="userSpaceOnUse"
+      x1="128"
+      y1="256"
+      x2="384"
+      y2="256"
+    >
+      <stop offset="0" stop-color="#3992F9" />
+      <stop offset="0.35" stop-color="#26B6D0" />
+      <stop offset="0.7" stop-color="#13D2A6" />
+      <stop offset="1" stop-color="#06F28C" />
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="#0B1A23" />
+
+  <g
+    fill="none"
+    stroke="url(#pdlc-sweep-small)"
+    stroke-width="48"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path d="M152 176 L232 256 L152 336" />
+    <path d="M288 336 H360" />
+  </g>
+</svg>

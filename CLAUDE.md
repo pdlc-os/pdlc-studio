@@ -116,6 +116,47 @@ App CSS below that block is unlayered and so overrides all Astryx layers. Keep i
 
 **Testing note**: assert on behavior and state (`data-selected`, `aria-*`, roles), never on generated StyleX class names.
 
+### App Mark
+
+The icon is **original artwork** — a shell prompt at the centre of a ring of
+graduated dots. It replaced a mark taken from the selfh.st icon set that
+appeared to be InvokeAI's logo.
+
+`brand/` is the canonical, editable source and has its own README covering the
+palette, the construction, and the editing gotchas. Two things matter here:
+
+**Two optical sizes, one identity.** `brand/pdlc-studio-mark.svg` carries 22
+dots plus a glyph, which is more detail than a 16px favicon has pixels for;
+below 32px it reduces to a coloured smudge. `brand/pdlc-studio-mark-small.svg`
+drops the ring and grows the prompt to fill the tile. `AppIcon` switches between
+them on `SMALL_SIZE_THRESHOLD`, so the 88px launch screen gets the ring and the
+16px favicon does not. Both keep an ink tile so the icon does not change
+character between sizes.
+
+The threshold is a CSS-pixel size, but what matters is device pixels: at DPR 2 a
+28px mark gets 56 real ones and the ring holds. Branching on DPR would make the
+icon change shape when a window moves between displays, so call sites that want
+the ring below the threshold pass `variant="mark"` instead — the chat and demo
+headers do, at 28px.
+
+**The mark lives in three places and nothing keeps them in sync automatically.**
+`brand/` is the source, `frontend/public/` holds the copies Vite serves as
+favicon and apple-touch-icon, and `AppIcon.tsx` inlines the geometry so it
+cannot flash in late on a cold load. Run `make sync-brand` after editing;
+`AppIcon.test.tsx` compares dot positions and path data across all three and
+fails if they drift, so a forgotten sync is caught by `make check`.
+
+Two traps worth knowing before touching it:
+
+- `gradientUnits="userSpaceOnUse"` is load-bearing. Under the default
+  `objectBoundingBox` every dot gets the whole blue-to-green ramp across its own
+  few pixels and the ring comes out uniformly muddy.
+- The gradient id is derived from `useId()` with **all** non-alphanumerics
+  stripped, not just colons. `useId` returns `:r1:` on React 18 and `«r1d»` on
+  19, and neither is a valid XML `NameChar`. Browsers resolve `url(#...)` by
+  exact string match and tolerate both, so this fails silently rather than
+  visibly.
+
 ### Shared Types
 
 **Location**: `shared/` - TypeScript type definitions shared between backend and frontend
@@ -245,6 +286,7 @@ npm run dev
 │   │   ├── components/  # UI components (chat, messages, dialogs, etc.)
 │   │   ├── types/       # Type definitions
 │   │   └── contexts/    # React contexts
+├── brand/               # Canonical app mark SVGs (see brand/README.md)
 ├── shared/              # Shared TypeScript types
 └── CLAUDE.md           # Technical documentation
 ```
@@ -444,6 +486,7 @@ optional dependencies, but this app keeps passing its own detected
 - `make typecheck` - Type check both
 - `make test` - Test both
 - `make check` - All quality checks
+- `make sync-brand` - Copy `brand/` mark SVGs into `frontend/public/`
 - `make format-files FILES="file1 file2"` - Format specific files
 
 ### Individual Commands
