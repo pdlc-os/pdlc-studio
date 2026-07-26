@@ -41,9 +41,12 @@ test-backend:
 build: build-frontend copy-dist build-backend
 build-frontend:
 	cd frontend && npm run build
+# Delegates to the same script the release workflow uses. Copying straight to
+# backend/dist would put the files one level above where cli/deno.ts looks
+# (../dist/static) and where `deno compile --include ./dist/static` reads them,
+# so `make build` would emit a binary serving nothing.
 copy-dist:
-	rm -rf backend/dist
-	cp -r frontend/dist backend/dist
+	cd backend && node scripts/copy-frontend.js
 build-backend:
 	cd backend && deno task build
 

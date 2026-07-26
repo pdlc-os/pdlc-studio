@@ -85,11 +85,25 @@ export function createApp(
   app.post("/api/chat", (c) => handleChatRequest(c, requestAbortControllers));
 
   // Static file serving with SPA fallback
-  // Serve static assets (CSS, JS, images, etc.)
   const serveStatic = runtime.createStaticFileMiddleware({
     root: config.staticPath,
   });
+
+  // Hashed build output.
   app.use("/assets/*", serveStatic);
+
+  // Files Vite copies from `public/` land at the dist root, not under
+  // /assets — the favicon and apple-touch-icon. Without this mount they fall
+  // straight through to the SPA handler below, which answers *every* unmatched
+  // path with index.html and a 200. That failure is invisible to a status-code
+  // check: the icon request "succeeds" and silently returns HTML, so the tab
+  // just shows no icon.
+  //
+  // Matched on "one path segment containing a dot" so it only claims
+  // file-looking requests; client-side routes have no extension and still
+  // reach the fallback. serveStatic calls next() on a miss, so a genuinely
+  // absent file falls through too.
+  app.use("/:file{[^/]+\\.[A-Za-z0-9]+}", serveStatic);
 
   // SPA fallback - serve index.html for all unmatched routes (except API routes)
   app.get("*", async (c) => {
