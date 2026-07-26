@@ -261,10 +261,16 @@ the subtypes the UI actually renders. The parameterised test in
 `useClaudeStreaming.test.ts` iterates the exported list, so adding a subtype
 there gets coverage for free.
 
-Note `rate_limit_event` arrives on nearly every request as a **top-level**
-message type (not a `system` subtype), so it lands in `useStreamParser`'s
-unknown-type branch and logs to the browser console once per request. Harmless,
-but that is where the noise comes from.
+There is a **second, separate** filter for the top-level `type`:
+`IGNORED_SDK_MESSAGE_TYPES` in `frontend/src/hooks/streaming/useStreamParser.ts`.
+The SDK's union is much wider than the four types this app renders, and some of
+the rest arrive constantly — `rate_limit_event` comes once per turn. Listing
+them there keeps them silent.
+
+Anything genuinely unrecognised still warns, but **once per page load rather
+than once per occurrence**, so a new SDK message type is visible without
+flooding the console. If a type turns out to be expected, add it to
+`IGNORED_SDK_MESSAGE_TYPES`.
 
 `init` is filtered from **display only**. It must still be processed, because
 `setHasReceivedInit(true)` is what allows `session_id` to be picked up from

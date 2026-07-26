@@ -492,4 +492,57 @@ describe("useStreamParser", () => {
       );
     });
   });
+
+  describe("Unrendered message types", () => {
+    it("ignores rate_limit_event silently", () => {
+      const { result } = renderHook(() => useStreamParser());
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      // Arrives once per turn in real sessions, so logging it per occurrence
+      // buried everything else in the console.
+      result.current.processStreamLine(
+        JSON.stringify({
+          type: "claude_json",
+          data: {
+            type: "rate_limit_event",
+            rate_limit_info: { status: "allowed" },
+            uuid: generateId(),
+            session_id: "s1",
+          },
+        }),
+        mockContext,
+      );
+
+      expect(warn).not.toHaveBeenCalled();
+      expect(log).not.toHaveBeenCalled();
+      expect(mockContext.addMessage).not.toHaveBeenCalled();
+
+      warn.mockRestore();
+      log.mockRestore();
+    });
+
+    it("warns once per genuinely unknown type, not once per occurrence", () => {
+      const { result } = renderHook(() => useStreamParser());
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      // Deliberately not a real SDK type, and unique per run so the
+      // module-level dedupe set cannot be polluted by another test.
+      const noveltype = `totally_new_type_${Math.random().toString(36).slice(2)}`;
+      const line = JSON.stringify({
+        type: "claude_json",
+        data: { type: noveltype, uuid: generateId(), session_id: "s1" },
+      });
+
+      result.current.processStreamLine(line, mockContext);
+      result.current.processStreamLine(line, mockContext);
+      result.current.processStreamLine(line, mockContext);
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain(noveltype);
+      expect(mockContext.addMessage).not.toHaveBeenCalled();
+
+      warn.mockRestore();
+    });
+  });
 });
