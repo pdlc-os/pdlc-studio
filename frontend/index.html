@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>PDLC Studio</title>
+    <script>
+      // Prevent a flash of the wrong color scheme before React mounts.
+      // Astryx resolves light/dark from CSS `color-scheme` (its tokens use
+      // `light-dark()`), and index.css derives <html>'s color-scheme from
+      // `data-theme`. Set only the attribute here: an inline `style.colorScheme`
+      // would outrank the stylesheet and freeze the page at this value, so
+      // toggling the theme later would recolor text but not the background.
+      (function () {
+        const storedTheme = localStorage.getItem("pdlc-studio-theme");
+        let theme = null;
+        try {
+          theme = storedTheme ? JSON.parse(storedTheme) : null;
+        } catch {
+          // If parsing fails, fall back to null
+          theme = null;
+        }
+
+        const isDark =
+          theme === "dark" ||
+          (!theme && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        const mode = isDark ? "dark" : "light";
+
+        document.documentElement.setAttribute("data-theme", mode);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

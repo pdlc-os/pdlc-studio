@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions & Discussions
+    url: https://github.com/pdlc-os/pdlc-studio/discussions
+    about: Ask questions, share ideas, or discuss the project with the community
+  - name: 📖 Documentation
+    url: https://github.com/pdlc-os/pdlc-studio/blob/main/README.md
+    about: Read the project documentation and setup guides
+  - name: 🐛 Claude CLI Issues
+    url: https://github.com/anthropics/claude-code/issues
+    about: Report issues with the Claude CLI tool itself (not the web UI)

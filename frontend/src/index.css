@@ -1,0 +1,112 @@
+/*
+ * Astryx design system stylesheet chain.
+ *
+ * Import order maps to the layer cascade and must not be reordered:
+ *   reset.css  -> @layer reset        (clean slate)
+ *   astryx.css -> @layer astryx-base  (component styles + :root design tokens)
+ *   theme.css  -> @layer astryx-theme (neutral theme token overrides)
+ *
+ * Astryx ships pre-built CSS, so no build plugin or StyleX compilation step is
+ * required. Everything below this block is unlayered app CSS, which therefore
+ * overrides all Astryx layers.
+ */
+@import "@astryxdesign/core/reset.css";
+@import "@astryxdesign/core/astryx.css";
+@import "@astryxdesign/theme-neutral/theme.css";
+
+/*
+ * Light/dark comes from the CSS `light-dark()` tokens in astryx.css, which
+ * resolve against `color-scheme`.
+ *
+ * <Theme> sets `color-scheme` on its own wrapper, but that wrapper is
+ * `display: contents` — it generates no box, so it can never paint a
+ * background. What it does do is mirror `data-theme` onto <html> and keep it in
+ * sync on every toggle, so drive <html>'s own `color-scheme` off that
+ * attribute. Setting it here rather than as an inline style in index.html is
+ * what makes it follow the toggle: an inline style would win over this rule and
+ * pin the page to whatever the preference was at first paint.
+ */
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Covers the overscroll/rubber-band area outside the app shell. */
+html {
+  background-color: var(--color-background-body);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/*
+ * Full-height flex column so ChatLayout can claim the remaining space.
+ *
+ * This also paints the app background: it is a real block box (unlike the
+ * `display: contents` theme wrapper) and it inherits `color-scheme` from the
+ * nearest enclosing <Theme>, so the demo route's nested ?theme= override
+ * repaints correctly without any component writing to documentElement.
+ */
+.app-shell {
+  background-color: var(--color-background-body);
+}
+
+/* Full-height flex column so ChatLayout can claim the remaining space. */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 72rem;
+  margin-inline: auto;
+  padding: var(--spacing-3);
+  gap: var(--spacing-3);
+}
+
+@media (min-width: 640px) {
+  .app-shell {
+    padding: var(--spacing-6);
+    gap: var(--spacing-4);
+  }
+}
+
+/* Scrollable page body for non-chat routes (project list, history). */
+.app-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Chat routes delegate their scroll container to ChatLayout. */
+.app-chat-region {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-mono {
+  font-family: var(--font-family-code);
+}
+
+/*
+ * Demo-recording emphasis. The demo harness appends these to permission-panel
+ * buttons to draw the eye during scripted playback; they replace the ad-hoc
+ * Tailwind ring utilities used before the Astryx migration.
+ */
+.demo-emphasis {
+  box-shadow: 0 0 0 2px var(--color-border-emphasized);
+}
+
+.demo-emphasis-success {
+  box-shadow: 0 0 0 2px var(--color-border-green);
+}
+
+.demo-emphasis-accent {
+  box-shadow: 0 0 0 2px var(--color-border-blue);
+}
