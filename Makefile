@@ -1,6 +1,6 @@
 # PDLC Studio - Development Tasks
 
-.PHONY: format format-check lint typecheck test build dev clean
+.PHONY: format format-check lint typecheck test build dev clean install install-frontend install-backend
 
 # Formatting
 format: format-frontend format-backend
@@ -56,9 +56,14 @@ dev-backend:
 # Quality checks (run before commit)
 check: format-check lint typecheck test build-frontend
 
-# Install dependencies
-install:
+# Install dependencies.
+# Backend deps are needed for the Node.js dev path and for `make test-backend`;
+# the Deno path resolves its own npm: specifiers and does not need them.
+install: install-frontend install-backend
+install-frontend:
 	cd frontend && npm ci
+install-backend:
+	cd backend && npm ci
 
 # Format specific files (usage: make format-files FILES="file1 file2")
 format-files:
