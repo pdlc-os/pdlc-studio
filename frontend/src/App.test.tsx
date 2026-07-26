@@ -18,7 +18,7 @@ describe("App Routing", () => {
     });
   });
 
-  it("renders project selection page at root path", async () => {
+  it("renders the launch window at root path", async () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
         <Routes>
@@ -28,8 +28,28 @@ describe("App Routing", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Select a Project")).toBeInTheDocument();
+      expect(screen.getByTestId("launch-panel")).toBeInTheDocument();
     });
+
+    // Identity, version, and all three actions — the Xcode-style layout.
+    expect(
+      screen.getByRole("heading", { level: 1, name: "PDLC Studio" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^Version /)).toBeInTheDocument();
+
+    for (const action of [
+      "Create New Project...",
+      "Clone Git Repository...",
+      "Open Existing Project...",
+    ]) {
+      expect(screen.getByRole("button", { name: action })).toBeInTheDocument();
+    }
+
+    // Recent Projects panel, empty here because the mock returns none.
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Recent Projects" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No Recent Projects")).toBeInTheDocument();
   });
 
   it("renders chat page when navigating to projects path", async () => {

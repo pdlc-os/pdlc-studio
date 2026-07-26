@@ -13,6 +13,11 @@ import {
   createConfigMiddleware,
 } from "./middleware/config.ts";
 import { handleProjectsRequest } from "./handlers/projects.ts";
+import { handleBrowseDirectoriesRequest } from "./handlers/directories.ts";
+import {
+  handleCloneRepositoryRequest,
+  handleCreateProjectRequest,
+} from "./handlers/projectSetup.ts";
 import { handleHistoriesRequest } from "./handlers/histories.ts";
 import { handleConversationRequest } from "./handlers/conversations.ts";
 import { handleChatRequest } from "./handlers/chat.ts";
@@ -57,6 +62,13 @@ export function createApp(
 
   // API routes
   app.get("/api/projects", (c) => handleProjectsRequest(c));
+
+  // Launch-screen workspace routes. Registered before the parameterised
+  // /api/projects/:encodedProjectName routes so "create" and "clone" are not
+  // captured as project names.
+  app.get("/api/directories", (c) => handleBrowseDirectoriesRequest(c));
+  app.post("/api/projects/create", (c) => handleCreateProjectRequest(c));
+  app.post("/api/projects/clone", (c) => handleCloneRepositoryRequest(c));
 
   app.get("/api/projects/:encodedProjectName/histories", (c) =>
     handleHistoriesRequest(c),

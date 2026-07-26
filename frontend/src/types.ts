@@ -251,6 +251,11 @@ export type {
   ChatRequest,
   ProjectsResponse,
   ProjectInfo,
+  BrowseDirectoriesResponse,
+  DirectoryEntryInfo,
+  CreateProjectRequest,
+  CloneRepositoryRequest,
+  ProjectPathResponse,
 } from "../../shared/types";
 
 // Re-export SDK types

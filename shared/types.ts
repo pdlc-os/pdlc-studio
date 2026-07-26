@@ -59,3 +59,48 @@ export interface ConversationHistory {
     messageCount: number;
   };
 }
+
+// Workspace / launch-screen types
+//
+// These back the launch screen's three actions. A browser cannot enumerate the
+// filesystem, so directory browsing has to round-trip through the backend.
+
+/** A single selectable subdirectory returned by the directory browser. */
+export interface DirectoryEntryInfo {
+  name: string;
+  path: string;
+}
+
+export interface BrowseDirectoriesResponse {
+  /** The resolved, normalised directory that was listed. */
+  path: string;
+  /** Parent directory, or null when `path` is the filesystem root. */
+  parent: string | null;
+  /** Subdirectories of `path`, name-sorted. Files are omitted. */
+  entries: DirectoryEntryInfo[];
+  /** True when `path` itself looks like a git working copy. */
+  isGitRepository: boolean;
+}
+
+export interface CreateProjectRequest {
+  /** Existing directory the new project directory is created inside. */
+  parentPath: string;
+  /** Single directory name; must not contain a path separator. */
+  name: string;
+  /** Run `git init` in the new directory. */
+  initGit?: boolean;
+}
+
+export interface CloneRepositoryRequest {
+  /** Git remote: https/http/ssh/git scheme, or scp-style user@host:path. */
+  url: string;
+  /** Existing directory the clone is created inside. */
+  parentPath: string;
+  /** Optional override for the directory name; defaults to the repo name. */
+  name?: string;
+}
+
+/** Returned by both create and clone: the directory to open. */
+export interface ProjectPathResponse {
+  path: string;
+}
