@@ -140,6 +140,16 @@ jobs:
 
   npm-publish:
     needs: build
+    # Opt-in. Publishing to npm is effectively irreversible: unpublish is
+    # limited to a 72-hour window and a version number can never be reused.
+    # `pdlc-studio` has never been published, so the first run would also claim
+    # the name on the public registry. Set the repository variable
+    # ENABLE_NPM_PUBLISH to "true" when you actually intend to publish; until
+    # then a tag push builds binaries and publishes the GitHub Release only.
+    #
+    # Note the first publish likely needs a NODE_AUTH_TOKEN regardless: OIDC
+    # trusted publishing has to be configured against an existing npm package.
+    if: vars.ENABLE_NPM_PUBLISH == 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write # Required for OIDC authentication
