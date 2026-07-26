@@ -79,10 +79,8 @@ body:
       label: Operating System
       description: What operating system are you using?
       options:
-        - Windows (x64)
-        - Windows (ARM64)
-        - macOS (Intel)
         - macOS (Apple Silicon)
+        - macOS (Intel)
         - Linux (x64)
         - Linux (ARM64)
         - Other (please specify in additional context)
@@ -95,7 +93,7 @@ body:
       label: Installation Method
       description: How did you install PDLC Studio?
       options:
-        - npm install -g @anthropic-ai/pdlc-studio
+        - Downloaded disk image (.dmg) from GitHub Releases
         - Downloaded binary from GitHub Releases
         - Built from source (Deno)
         - Built from source (Node.js)
@@ -130,7 +128,7 @@ body:
     id: claude-path
     attributes:
       label: Claude CLI Installation Path
-      description: Where is Claude CLI installed? (run `which claude` or `where claude`)
+      description: Where is Claude CLI installed? (run `which claude`)
       placeholder: e.g., /usr/local/bin/claude
 
   - type: input

@@ -32,7 +32,6 @@ import { HistoryView } from "./HistoryView";
 import { AppIcon } from "./AppIcon";
 import { getChatUrl, getProjectsUrl } from "../config/api";
 import { KEYBOARD_SHORTCUTS } from "../utils/constants";
-import { normalizeWindowsPath } from "../utils/pathUtils";
 import type { StreamingContext } from "../hooks/streaming/useMessageProcessor";
 
 export function ChatPage() {
@@ -47,11 +46,7 @@ export function ChatPage() {
     const rawPath = location.pathname.replace("/projects", "");
     if (!rawPath) return undefined;
 
-    // URL decode the path
-    const decodedPath = decodeURIComponent(rawPath);
-
-    // Normalize Windows paths (remove leading slash from /C:/... format)
-    return normalizeWindowsPath(decodedPath);
+    return decodeURIComponent(rawPath);
   })();
 
   // Get current view and sessionId from query parameters
@@ -74,16 +69,7 @@ export function ChatPage() {
 
     const project = projects.find((p) => p.path === workingDirectory);
 
-    // Normalize paths for comparison (handle Windows path issues)
-    const normalizedWorking = normalizeWindowsPath(workingDirectory);
-    const normalizedProject = projects.find(
-      (p) => normalizeWindowsPath(p.path) === normalizedWorking,
-    );
-
-    // Use normalized result if exact match fails
-    const finalProject = project || normalizedProject;
-
-    return finalProject?.encodedName || null;
+    return project?.encodedName || null;
   }, [workingDirectory, projects]);
 
   // Load conversation history if sessionId is provided

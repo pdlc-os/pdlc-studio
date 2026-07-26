@@ -26,20 +26,14 @@ export function getArgs(): string[] {
 }
 
 /**
- * Get platform identifier
+ * Get platform identifier.
+ *
+ * Windows is not supported: no Windows binary is released and the codebase
+ * assumes POSIX conventions (`which`, `$PATH` separators, executables without
+ * an extension). Anything that is not macOS is treated as Linux.
  */
-export function getPlatform(): "windows" | "darwin" | "linux" {
-  switch (process.platform) {
-    case "win32":
-      return "windows";
-    case "darwin":
-      return "darwin";
-    case "linux":
-      return "linux";
-    default:
-      // Default to linux for unknown platforms
-      return "linux";
-  }
+export function getPlatform(): "darwin" | "linux" {
+  return process.platform === "darwin" ? "darwin" : "linux";
 }
 
 /**

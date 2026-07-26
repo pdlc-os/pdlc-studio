@@ -18,7 +18,6 @@ import { basename, isAbsolute, join, normalize } from "node:path";
 import { getHomeDir } from "./os.ts";
 
 /** Characters that have no business in a path or URL we are about to act on. */
-// eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 
 /**

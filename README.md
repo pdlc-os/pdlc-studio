@@ -78,16 +78,8 @@ The release binary is self-contained: it bundles the runtime and the web assets,
 
 Install the prerequisites with one command:
 
-**macOS and Linux**
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pdlc-os/pdlc-studio/main/scripts/install-prerequisites.sh | bash
-```
-
-**Windows (PowerShell)**
-
-```powershell
-irm https://raw.githubusercontent.com/pdlc-os/pdlc-studio/main/scripts/install-prerequisites.ps1 | iex
 ```
 
 The script installs the Claude CLI if it is missing and dotenvx if you want `.env` support. It **checks** for Node.js and Deno and prints the exact install command rather than installing them, because most developers manage those through a version manager (nvm, asdf, volta, fnm) and a second copy on `PATH` is a common source of the path-detection problems in [Troubleshooting](#troubleshooting). The script is safe to re-run; anything already present is left alone.
@@ -97,38 +89,30 @@ The script installs the Claude CLI if it is missing and dotenvx if you want `.en
 
 ### Option 1 — Binary Release
 
-Self-contained executables are published for each release.
+Self-contained builds are published for each release. macOS ships as a disk
+image; Linux ships as a bare executable.
 
 #### macOS
 
+Download `pdlc-studio-macos-arm64.dmg` from
+[Releases](https://github.com/pdlc-os/pdlc-studio/releases/latest) (or
+`pdlc-studio-macos-x64.dmg` on an Intel Mac), open it, and drag `pdlc-studio`
+somewhere on your `PATH`. Or from the terminal:
+
 ```bash
-# Apple Silicon (M1 and later)
-curl -fsSLO https://github.com/pdlc-os/pdlc-studio/releases/latest/download/pdlc-studio-macos-arm64
-chmod +x pdlc-studio-macos-arm64
+# Apple Silicon; use pdlc-studio-macos-x64.dmg on Intel
+curl -fsSLO https://github.com/pdlc-os/pdlc-studio/releases/latest/download/pdlc-studio-macos-arm64.dmg
+hdiutil attach pdlc-studio-macos-arm64.dmg
+cp "/Volumes/PDLC Studio/pdlc-studio" ./pdlc-studio
+hdiutil detach "/Volumes/PDLC Studio"
 
 # Remove the download quarantine flag, then run
-xattr -d com.apple.quarantine pdlc-studio-macos-arm64
-./pdlc-studio-macos-arm64
-```
-
-On an Intel Mac, substitute `pdlc-studio-macos-x64` throughout.
-
-> [!IMPORTANT]
-> The binaries are not code-signed, so macOS quarantines them on download and Gatekeeper will refuse to run them until the flag above is cleared. Without `xattr -d`, you get "cannot be opened because the developer cannot be verified".
-
-#### Windows
-
-```powershell
-# PowerShell
-Invoke-WebRequest -Uri https://github.com/pdlc-os/pdlc-studio/releases/latest/download/pdlc-studio-windows-x64.exe -OutFile pdlc-studio.exe
-
-# Clear the downloaded-file marker, then run
-Unblock-File .\pdlc-studio.exe
-.\pdlc-studio.exe
+xattr -d com.apple.quarantine ./pdlc-studio
+./pdlc-studio
 ```
 
 > [!IMPORTANT]
-> SmartScreen may warn about an unrecognised publisher because the binaries are unsigned. `Unblock-File` clears the mark-of-the-web; if the warning still appears, choose **More info → Run anyway**.
+> The build is not code-signed, so macOS quarantines it on download and Gatekeeper refuses to run it until the flag above is cleared. Without `xattr -d`, you get "cannot be opened because the developer cannot be verified".
 
 #### Linux
 
@@ -384,7 +368,7 @@ Either. `make dev-backend` uses Deno and needs no dependency install; `cd backen
 <details>
 <summary><strong>Why does macOS refuse to open the binary?</strong></summary>
 
-The binaries are unsigned, so macOS quarantines them. Clear the flag with `xattr -d com.apple.quarantine <binary>` — see [Option 1](#option-1--binary-release).
+The build is unsigned, so macOS quarantines it on download. Clear the flag with `xattr -d com.apple.quarantine ./pdlc-studio` — see [Option 1](#option-1--binary-release).
 
 </details>
 

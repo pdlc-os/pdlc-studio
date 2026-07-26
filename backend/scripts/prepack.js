@@ -5,7 +5,7 @@
  *
  * This script copies README.md and LICENSE from the project root
  * to the backend directory for npm package distribution.
- * Replaces the Unix-specific `cp` command for Windows compatibility.
+ * Uses Node's fs API rather than shelling out to `cp`.
  */
 
 import { copyFileSync, existsSync } from "node:fs";

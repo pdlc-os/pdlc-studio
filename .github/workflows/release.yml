@@ -113,9 +113,6 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: pdlc-studio-macos-arm64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact_name: pdlc-studio-windows-x64
 
     steps:
       - name: Checkout code
@@ -153,13 +150,53 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Install and cache Deno dependencies
-        run: deno install && deno cache cli/deno.ts
+      # `deno install` was previously used here, which resolves the full
+      # package.json — devDependencies and every platform-specific optional
+      # dependency included. `deno compile` then embedded that whole
+      # node_modules tree, which is why the binaries were 428 MB (macOS) and
+      # 741 MB (Linux).
+      #
+      # The two big wins:
+      #   --omit=dev       drops typescript, eslint, prettier, esbuild (~46 MB)
+      #   --omit=optional  drops @anthropic-ai/claude-agent-sdk-<platform>,
+      #                    a full Claude Code native binary at ~245 MB. This app
+      #                    never runs it: chat.ts passes an explicit
+      #                    pathToClaudeCodeExecutable pointing at the user's own
+      #                    installed CLI, so the bundled copy is dead weight.
+      #
+      # Measured on macOS arm64: 428 MB -> 94 MB.
+      - name: Install production dependencies
+        run: npm ci --omit=dev --omit=optional
         working-directory: backend
 
+      # --node-modules-dir=manual uses the pruned tree above verbatim instead of
+      # re-resolving it. --no-check is required because dropping devDependencies
+      # removes @types/node, which a JSR dependency needs for type resolution;
+      # types are already checked by `make check` on every PR, and this step only
+      # packages an already-reviewed commit.
       - name: Build backend binary
-        run: deno compile --allow-net --allow-run --allow-read --allow-write --allow-env --allow-sys --include ./dist/static --target ${{ matrix.target }} --output ../dist/${{ matrix.artifact_name }} cli/deno.ts
+        run: deno compile --allow-net --allow-run --allow-read --allow-write --allow-env --allow-sys --node-modules-dir=manual --no-check --include ./dist/static --target ${{ matrix.target }} --output ../dist/${{ matrix.artifact_name }} cli/deno.ts
         working-directory: backend
+
+      # macOS ships as a mountable disk image. Renaming the executable to .dmg
+      # would produce a file macOS cannot mount, so build a real UDZO image with
+      # the binary inside. UDZO is compressed, which shrinks the download again.
+      - name: Package macOS disk image
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          STAGING="$RUNNER_TEMP/dmg"
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING"
+          cp "dist/${{ matrix.artifact_name }}" "$STAGING/pdlc-studio"
+          chmod +x "$STAGING/pdlc-studio"
+          hdiutil create -volname "PDLC Studio" -srcfolder "$STAGING" \
+            -ov -format UDZO "dist/${{ matrix.artifact_name }}.dmg"
+          # Ship the image only, so there is one obvious macOS download.
+          rm "dist/${{ matrix.artifact_name }}"
+
+      - name: Report artifact size
+        run: ls -lh dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
