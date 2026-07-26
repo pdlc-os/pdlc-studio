@@ -17,6 +17,38 @@ import { isThinkingContentItem } from "./messageTypes";
 import { extractToolInfo, generateToolPatterns } from "./toolUtils";
 
 /**
+ * `type: "system"` subtypes that are never shown in the transcript.
+ *
+ * The Agent SDK routes a great deal of telemetry and internal bookkeeping
+ * through `type: "system"` — there are ~40 subtypes, and the UI has dedicated
+ * rendering for almost none of them. Anything not filtered here falls through
+ * to `SystemMessageComponent`'s raw-JSON fallback and clutters the conversation.
+ *
+ * `init` is suppressed for *display only*; its session-state side effects still
+ * run in `processSystemMessage`.
+ *
+ * This is a blocklist, so a future SDK version can introduce a new noisy
+ * subtype that shows up in the UI until it is added here. Add subtypes as they
+ * surface, or switch to an allowlist of the subtypes the UI actually renders.
+ */
+export const NON_DISPLAYED_SYSTEM_SUBTYPES: readonly string[] = [
+  "init",
+  "hook_started",
+  "hook_progress",
+  "hook_response",
+  "thinking_tokens",
+];
+
+const NON_DISPLAYED_SYSTEM_SUBTYPE_SET: ReadonlySet<string> = new Set(
+  NON_DISPLAYED_SYSTEM_SUBTYPES,
+);
+
+/** True when a `type: "system"` subtype should be kept out of the transcript. */
+export function isNonDisplayedSystemSubtype(subtype: string): boolean {
+  return NON_DISPLAYED_SYSTEM_SUBTYPE_SET.has(subtype);
+}
+
+/**
  * Tool cache interface for tracking tool_use information
  */
 interface ToolCache {
@@ -141,9 +173,12 @@ export class UnifiedMessageProcessor {
    * Process tool_result content item
    */
   private processToolResult(
+    // `content` is declared loosely on purpose: a tool_result block may carry a
+    // string, an array of content blocks, or nothing at all. The body already
+    // serialises the non-string cases.
     contentItem: {
       tool_use_id?: string;
-      content: string;
+      content?: unknown;
       is_error?: boolean;
     },
     context: ProcessingContext,
@@ -153,7 +188,8 @@ export class UnifiedMessageProcessor {
     const content =
       typeof contentItem.content === "string"
         ? contentItem.content
-        : JSON.stringify(contentItem.content);
+        : // JSON.stringify(undefined) is undefined, not "undefined"
+          (JSON.stringify(contentItem.content) ?? "");
 
     // Check for permission errors - but skip tool use errors which should be displayed as regular results
     if (
@@ -161,7 +197,7 @@ export class UnifiedMessageProcessor {
       contentItem.is_error &&
       !isToolUseError(content)
     ) {
-      this.handlePermissionError(contentItem, context);
+      this.handlePermissionError({ ...contentItem, content }, context);
       return;
     }
 
@@ -227,26 +263,32 @@ export class UnifiedMessageProcessor {
    * Handle tool_use content item
    */
   private handleToolUse(
+    // A tool_use block's `input` is typed `unknown` by the SDK — its shape is
+    // whatever the invoked tool declared — so it is narrowed below rather than
+    // assumed to be an object.
     contentItem: {
       id?: string;
       name?: string;
-      input?: Record<string, unknown>;
+      input?: unknown;
     },
     context: ProcessingContext,
     options: ProcessingOptions,
   ): void {
+    const input: Record<string, unknown> =
+      typeof contentItem.input === "object" &&
+      contentItem.input !== null &&
+      !Array.isArray(contentItem.input)
+        ? (contentItem.input as Record<string, unknown>)
+        : {};
+
     // Cache tool_use information for later permission error handling and tool_result correlation
     if (contentItem.id && contentItem.name) {
-      this.cacheToolUse(
-        contentItem.id,
-        contentItem.name,
-        contentItem.input || {},
-      );
+      this.cacheToolUse(contentItem.id, contentItem.name, input);
     }
 
     // Special handling for ExitPlanMode - create plan message instead of tool message
     if (contentItem.name === "ExitPlanMode") {
-      const planContent = (contentItem.input?.plan as string) || "";
+      const planContent = (input.plan as string) || "";
       const planMessage = {
         type: "plan" as const,
         plan: planContent,
@@ -256,19 +298,22 @@ export class UnifiedMessageProcessor {
       context.addMessage(planMessage);
     } else if (contentItem.name === "TodoWrite") {
       // Special handling for TodoWrite - create todo message from input
-      const todoMessage = createTodoMessageFromInput(
-        contentItem.input || {},
-        options.timestamp,
-      );
+      const todoMessage = createTodoMessageFromInput(input, options.timestamp);
       if (todoMessage) {
         context.addMessage(todoMessage);
       } else {
         // Fallback to regular tool message if todo parsing fails
-        const toolMessage = createToolMessage(contentItem, options.timestamp);
+        const toolMessage = createToolMessage(
+          { ...contentItem, input },
+          options.timestamp,
+        );
         context.addMessage(toolMessage);
       }
     } else {
-      const toolMessage = createToolMessage(contentItem, options.timestamp);
+      const toolMessage = createToolMessage(
+        { ...contentItem, input },
+        options.timestamp,
+      );
       context.addMessage(toolMessage);
     }
   }
@@ -283,22 +328,18 @@ export class UnifiedMessageProcessor {
   ): void {
     const timestamp = options.timestamp || Date.now();
 
-    // Check if this is an init message and if we should show it (streaming only)
+    // Runs regardless of whether the init banner is rendered: `hasReceivedInit`
+    // is what allows session_id to be picked up from later assistant messages,
+    // so suppressing the *display* of init must not skip this.
     if (options.isStreaming && message.subtype === "init") {
-      // Mark that we've received init
       context.setHasReceivedInit?.(true);
-
-      const shouldShow = context.shouldShowInitMessage?.() ?? true;
-      if (shouldShow) {
-        const systemMessage = convertSystemMessage(message, timestamp);
-        context.addMessage(systemMessage);
-        context.onInitMessageShown?.();
-      }
-    } else {
-      // Always show non-init system messages
-      const systemMessage = convertSystemMessage(message, timestamp);
-      context.addMessage(systemMessage);
     }
+
+    if (isNonDisplayedSystemSubtype(message.subtype)) {
+      return;
+    }
+
+    context.addMessage(convertSystemMessage(message, timestamp));
   }
 
   /**
@@ -476,9 +517,11 @@ export class UnifiedMessageProcessor {
     context: ProcessingContext,
     options: ProcessingOptions = {},
   ): AllMessage[] {
+    // `timestamp` is required on TimestampedSDKMessage but optional on plain SDK
+    // messages, so presence of the key isn't enough — check for a real value.
     const timestamp =
       options.timestamp ||
-      ("timestamp" in message
+      ("timestamp" in message && typeof message.timestamp === "string"
         ? new Date(message.timestamp).getTime()
         : Date.now());
 

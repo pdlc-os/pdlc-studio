@@ -6,7 +6,7 @@
 import type {
   SDKAssistantMessage,
   SDKUserMessage,
-} from "@anthropic-ai/claude-code";
+} from "@anthropic-ai/claude-agent-sdk";
 import { logger } from "../utils/logger.ts";
 import { readTextFile, readDir } from "../utils/fs.ts";
 
@@ -23,6 +23,25 @@ export interface RawHistoryLine {
   cwd?: string;
   version?: string;
   requestId?: string;
+}
+
+/**
+ * Reads `message.id`, which only assistant messages carry.
+ *
+ * `RawHistoryLine.message` is a union of the SDK's user shape (`MessageParam`,
+ * no `id`) and assistant shape (`BetaMessage`, has `id`). Testing
+ * `role === "assistant"` does not narrow that union, because `MessageParam`
+ * also admits `role: "assistant"` — so read the field structurally. These
+ * lines come off disk as untyped JSON, so the property may be absent
+ * regardless of what the declared type promises.
+ */
+export function getMessageId(
+  message: RawHistoryLine["message"],
+): string | undefined {
+  if (message && "id" in message && typeof message.id === "string") {
+    return message.id;
+  }
+  return undefined;
 }
 
 // Legacy interface maintained for transition period
@@ -68,8 +87,11 @@ async function parseHistoryFile(
         messages.push(parsed);
 
         // Track message IDs from assistant messages
-        if (parsed.message?.role === "assistant" && parsed.message?.id) {
-          messageIds.add(parsed.message.id);
+        if (parsed.message?.role === "assistant") {
+          const messageId = getMessageId(parsed.message);
+          if (messageId) {
+            messageIds.add(messageId);
+          }
         }
 
         // Track timestamps

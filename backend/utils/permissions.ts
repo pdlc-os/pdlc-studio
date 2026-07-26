@@ -5,7 +5,7 @@
  * warning can't drift apart on what the default actually is.
  */
 
-import type { PermissionMode } from "@anthropic-ai/claude-code";
+import type { PermissionMode } from "@anthropic-ai/claude-agent-sdk";
 import { logger } from "./logger.ts";
 
 /**

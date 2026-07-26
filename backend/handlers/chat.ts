@@ -1,5 +1,9 @@
 import { Context } from "hono";
-import { query, type PermissionMode } from "@anthropic-ai/claude-code";
+import {
+  AbortError,
+  query,
+  type PermissionMode,
+} from "@anthropic-ai/claude-agent-sdk";
 import type { ChatRequest, StreamResponse } from "../../shared/types.ts";
 import { logger } from "../utils/logger.ts";
 import {
@@ -50,6 +54,15 @@ async function* executeClaudeCommand(
         executable: "node" as const,
         executableArgs: [],
         pathToClaudeCodeExecutable: cliPath,
+        // The Agent SDK sends an *empty* system prompt when this is omitted —
+        // it is a generic agent harness, not Claude Code, by default. This app
+        // is a front end for Claude Code, so ask for the CLI's own prompt
+        // explicitly. Dropping this line silently removes tool guidance,
+        // CLAUDE.md handling, and every other Claude Code behaviour.
+        systemPrompt: {
+          type: "preset" as const,
+          preset: "claude_code" as const,
+        },
         ...(sessionId ? { resume: sessionId } : {}),
         ...(allowedTools ? { allowedTools } : {}),
         ...(workingDirectory ? { cwd: workingDirectory } : {}),
@@ -67,12 +80,11 @@ async function* executeClaudeCommand(
 
     yield { type: "done" };
   } catch (error) {
-    // Check if error is due to abort
-    // TODO: Re-enable when AbortError is properly exported from Claude SDK
-    // if (error instanceof AbortError) {
-    //   yield { type: "aborted" };
-    // } else {
-    {
+    // The Agent SDK exports AbortError as a real runtime value, so an aborted
+    // request can finally be reported as such instead of as a failure.
+    if (error instanceof AbortError) {
+      yield { type: "aborted" };
+    } else {
       logger.chat.error("Claude Code execution failed: {error}", { error });
       yield {
         type: "error",

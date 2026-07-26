@@ -3,7 +3,7 @@
  * Handles restoring accurate timestamps for continued conversations
  */
 
-import type { RawHistoryLine } from "./parser.ts";
+import { getMessageId, type RawHistoryLine } from "./parser.ts";
 
 /**
  * Restore accurate timestamps for messages in a conversation
@@ -18,8 +18,9 @@ export function restoreTimestamps(
 
   // First pass: collect earliest timestamps for each message.id
   for (const msg of messages) {
-    if (msg.type === "assistant" && msg.message?.id) {
-      const messageId = msg.message.id;
+    const messageId =
+      msg.type === "assistant" ? getMessageId(msg.message) : undefined;
+    if (messageId) {
       if (!timestampMap.has(messageId)) {
         timestampMap.set(messageId, msg.timestamp);
       } else {
@@ -34,8 +35,10 @@ export function restoreTimestamps(
 
   // Second pass: restore timestamps and return updated messages
   return messages.map((msg) => {
-    if (msg.type === "assistant" && msg.message?.id) {
-      const restoredTimestamp = timestampMap.get(msg.message.id);
+    const messageId =
+      msg.type === "assistant" ? getMessageId(msg.message) : undefined;
+    if (messageId) {
+      const restoredTimestamp = timestampMap.get(messageId);
       if (restoredTimestamp) {
         return {
           ...msg,

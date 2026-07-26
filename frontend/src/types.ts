@@ -1,10 +1,22 @@
 import type {
+  SDKMessage,
   SDKUserMessage,
   SDKAssistantMessage,
   SDKSystemMessage,
   SDKResultMessage,
   PermissionMode as SDKPermissionMode,
-} from "@anthropic-ai/claude-code";
+} from "@anthropic-ai/claude-agent-sdk";
+
+/**
+ * Every SDK message that arrives with `type: "system"`.
+ *
+ * The Agent SDK routes far more than the session banner through this type —
+ * compaction boundaries, status updates, hook progress, task notifications and
+ * more all share `type: "system"` and are told apart by `subtype`. Consumers
+ * must narrow on `subtype` before touching `init`-only fields such as `tools`
+ * or `cwd`.
+ */
+export type SDKSystemLikeMessage = Extract<SDKMessage, { type: "system" }>;
 
 // Chat message for user/assistant interactions (not part of SDKMessage)
 export interface ChatMessage {
@@ -40,7 +52,7 @@ export type HooksMessage = {
 
 // System message extending SDK types with timestamp
 export type SystemMessage = (
-  | SDKSystemMessage
+  | SDKSystemLikeMessage
   | SDKResultMessage
   | ErrorMessage
   | AbortMessage
@@ -179,13 +191,30 @@ export type PermissionMode =
 
 // SDK type integration utilities
 export function toSDKPermissionMode(uiMode: PermissionMode): SDKPermissionMode {
-  return uiMode as SDKPermissionMode;
+  return uiMode;
 }
 
+/**
+ * Narrows an SDK permission mode to one the UI can display.
+ *
+ * The Agent SDK's set is a superset of the four modes this app cycles through —
+ * it also has `dontAsk` and `auto`. Those have no UI representation, and
+ * reporting them as a mode the user did pick would be worse than admitting we
+ * don't know, so they collapse to `default`. Add them to `PermissionMode` and
+ * to the UI's cycle order if the app should ever offer them.
+ */
 export function fromSDKPermissionMode(
   sdkMode: SDKPermissionMode,
 ): PermissionMode {
-  return sdkMode;
+  switch (sdkMode) {
+    case "default":
+    case "plan":
+    case "acceptEdits":
+    case "bypassPermissions":
+      return sdkMode;
+    default:
+      return "default";
+  }
 }
 
 // Chat state extensions for permission mode
@@ -231,4 +260,4 @@ export type {
   SDKResultMessage,
   SDKAssistantMessage,
   SDKUserMessage,
-} from "@anthropic-ai/claude-code";
+} from "@anthropic-ai/claude-agent-sdk";
