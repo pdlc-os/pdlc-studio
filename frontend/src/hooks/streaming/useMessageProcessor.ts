@@ -1,5 +1,6 @@
 import type { ContextUsage } from "../../utils/contextUsage";
 import type { AgentEvent } from "../../utils/agentActivity";
+import type { PendingQuestionPayload } from "../../types";
 import type { SDKStatus } from "../../types";
 import type { AllMessage, ChatMessage } from "../../types";
 import { useMessageConverter } from "../useMessageConverter";
@@ -28,6 +29,8 @@ export interface StreamingContext {
   onStatusChange?: (status: SDKStatus) => void;
   /** Task lifecycle, folded into the Agents panel's state. */
   onAgentEvent?: (event: AgentEvent) => void;
+  /** A question Claude is blocked on, awaiting the user's answer. */
+  onAskQuestion?: (question: PendingQuestionPayload) => void;
 }
 
 /**

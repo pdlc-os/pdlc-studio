@@ -22,6 +22,7 @@
  * escape hatch.
  */
 
+import { Context } from "hono";
 import { randomUUID } from "node:crypto";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
@@ -236,4 +237,50 @@ export function createAskUserQuestionServer(options: {
     version: "1.0.0",
     tools: [createAskUserQuestionTool(options)],
   });
+}
+
+/**
+ * Handles `POST /api/questions/:questionId`.
+ *
+ * The suspended handler lives in this process, so the answer arrives on its
+ * own request rather than through the chat stream — the stream only goes one
+ * way.
+ */
+export async function handleAnswerQuestionRequest(c: Context) {
+  const questionId = c.req.param("questionId");
+  if (!questionId) {
+    return c.json({ error: "Question id is required" }, 400);
+  }
+
+  let answers: QuestionAnswers;
+  try {
+    const body = (await c.req.json()) as { answers?: unknown };
+    if (!body?.answers || typeof body.answers !== "object") {
+      return c.json({ error: "answers must be an object" }, 400);
+    }
+    answers = Object.fromEntries(
+      Object.entries(body.answers as Record<string, unknown>)
+        .filter(([, value]) => typeof value === "string")
+        .map(([key, value]) => [key, value as string]),
+    );
+  } catch {
+    return c.json({ error: "Request body must be JSON" }, 400);
+  }
+
+  // An empty object is how a cancelled question reports itself, so refuse it
+  // here rather than letting an answer masquerade as a cancellation.
+  if (Object.keys(answers).length === 0) {
+    return c.json({ error: "At least one answer is required" }, 400);
+  }
+
+  if (!answerQuestion(questionId, answers)) {
+    return c.json({ error: "No question is waiting on that id" }, 404);
+  }
+
+  return c.json({ success: true });
+}
+
+/** Handles `GET /api/questions` — lets a reloaded client rebuild its cards. */
+export function handlePendingQuestionsRequest(c: Context) {
+  return c.json({ questions: listPendingQuestions() });
 }

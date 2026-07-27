@@ -34,6 +34,10 @@ import {
   handleUploadAttachmentsRequest,
 } from "./handlers/attachments.ts";
 import { handleAbortRequest } from "./handlers/abort.ts";
+import {
+  handleAnswerQuestionRequest,
+  handlePendingQuestionsRequest,
+} from "./handlers/askUserQuestion.ts";
 import { logger } from "./utils/logger.ts";
 import { readBinaryFile } from "./utils/fs.ts";
 
@@ -101,6 +105,9 @@ export function createApp(
   app.delete("/api/projects/:encodedProjectName/histories/:sessionId", (c) =>
     handleDeleteConversationRequest(c),
   );
+
+  app.get("/api/questions", (c) => handlePendingQuestionsRequest(c));
+  app.post("/api/questions/:questionId", (c) => handleAnswerQuestionRequest(c));
 
   app.get("/api/projects/:encodedProjectName/histories/:sessionId/team", (c) =>
     handleSessionTeamRequest(c),

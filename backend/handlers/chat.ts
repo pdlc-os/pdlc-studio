@@ -4,6 +4,7 @@ import {
   query,
   type PermissionMode,
   type Query,
+  type SDKMessage,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type {
@@ -13,6 +14,10 @@ import type {
   ThinkingMode,
 } from "../../shared/types.ts";
 import { logger } from "../utils/logger.ts";
+import {
+  cancelQuestions,
+  createAskUserQuestionServer,
+} from "./askUserQuestion.ts";
 import {
   resolvePermissionMode,
   VALID_PERMISSION_MODES,
@@ -105,6 +110,15 @@ async function* executeClaudeCommand(
     });
 
     /*
+     * Questions raised by the tool while this generator is parked awaiting the
+     * SDK. The handler cannot yield into the stream itself, so it drops the
+     * question here and the loop below drains it on the next message.
+     */
+    const questionQueue: StreamResponse[] = [];
+    /** Set once the loop below is running; wakes it when a question arrives. */
+    let notifyQuestion: () => void = () => {};
+
+    /*
      * Streaming input, not a plain string.
      *
      * The SDK's control requests — interrupt(), setModel(),
@@ -154,6 +168,20 @@ async function* executeClaudeCommand(
           type: "preset" as const,
           preset: "claude_code" as const,
         },
+        /*
+         * AskUserQuestion is not among the tools an SDK session is given, so
+         * the app supplies its own. Claude sees it namespaced as
+         * mcp__pdlc__AskUserQuestion.
+         */
+        mcpServers: {
+          pdlc: createAskUserQuestionServer({
+            requestId,
+            publish: (question) => {
+              questionQueue.push({ type: "ask_user_question", question });
+              notifyQuestion();
+            },
+          }),
+        },
         ...(sessionId ? { resume: sessionId } : {}),
         ...(allowedTools ? { allowedTools } : {}),
         ...(workingDirectory ? { cwd: workingDirectory } : {}),
@@ -184,8 +212,45 @@ async function* executeClaudeCommand(
     // the finally below, so a finished turn is never addressable.
     activeSessions.set(requestId, session);
 
-    for await (const sdkMessage of session) {
-      // Debug logging of raw SDK messages with detailed content
+    /*
+     * Two sources feed this stream, and only one of them is the SDK.
+     *
+     * A suspended AskUserQuestion handler blocks the model, so no further SDK
+     * message arrives until the user answers — and the question itself is what
+     * the user needs in order to answer. Draining the queue only after each
+     * SDK message would therefore deadlock: the card that unblocks the turn
+     * would sit in the queue waiting for the turn to move.
+     *
+     * So the loop waits on whichever comes first. `pendingNext` is held across
+     * wake-ups rather than re-requested, because calling next() again would
+     * drop the message the previous call is still waiting on.
+     */
+    const iterator = session[Symbol.asyncIterator]();
+    let pendingNext: Promise<IteratorResult<SDKMessage>> | null = null;
+    let wake: (() => void) | null = null;
+    notifyQuestion = () => wake?.();
+
+    for (;;) {
+      while (questionQueue.length > 0) {
+        yield questionQueue.shift()!;
+      }
+
+      pendingNext ??= iterator.next();
+      const woken = new Promise<{ from: "queue" }>((resolve) => {
+        wake = () => resolve({ from: "queue" });
+      });
+
+      const settled = await Promise.race([
+        pendingNext.then((result) => ({ from: "sdk" as const, result })),
+        woken,
+      ]);
+
+      if (settled.from === "queue") continue;
+
+      pendingNext = null;
+      if (settled.result.done) break;
+
+      const sdkMessage = settled.result.value;
       logger.chat.debug("Claude SDK Message: {sdkMessage}", { sdkMessage });
 
       yield {
@@ -223,6 +288,12 @@ async function* executeClaudeCommand(
     // leave the generator parked forever.
     closeInput();
     interruptedRequests.delete(requestId);
+    /*
+     * A turn that ended by any route — interrupt, abort, error — must not
+     * leave a suspended handler holding its promise, nor a card the user can
+     * still click with nothing behind it.
+     */
+    cancelQuestions(requestId);
 
     // Clean up AbortController from map
     if (requestAbortControllers.has(requestId)) {
