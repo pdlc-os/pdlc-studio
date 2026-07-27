@@ -72,10 +72,13 @@ export function ModelSelector({
   }, [models]);
 
   /*
-   * "Default (recommended)" says nothing about what will actually answer it,
-   * so the model it resolves to is named alongside. Resolved by matching
-   * descriptions, since the payload carries no field saying which model the
-   * default is.
+   * The default entry is shown as the model it resolves to, not as "Default
+   * (recommended)".
+   *
+   * That label said nothing about what would actually answer, and appending
+   * the real name to it made the trigger wide enough to crowd the composer.
+   * Substituting is both shorter and more informative. Resolved by matching
+   * descriptions, since the payload carries no field naming the default.
    */
   const labelFor = useMemo(() => {
     const named = new Map<string, string>();
@@ -89,9 +92,7 @@ export function ModelSelector({
 
     return (option: ModelOption) => {
       const resolved = named.get(option.description.trim().toLowerCase());
-      return resolved && resolved !== option.displayName
-        ? `${option.displayName} — ${resolved}`
-        : option.displayName;
+      return resolved ?? option.displayName;
     };
   }, [models]);
 
