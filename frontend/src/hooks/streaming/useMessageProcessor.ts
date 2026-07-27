@@ -1,3 +1,5 @@
+import type { ContextUsage } from "../../utils/contextUsage";
+import type { SDKStatus } from "../../types";
 import type { AllMessage, ChatMessage } from "../../types";
 import { useMessageConverter } from "../useMessageConverter";
 
@@ -17,6 +19,10 @@ export interface StreamingContext {
     toolUseId: string,
   ) => void;
   onAbortRequest?: () => void;
+  /** Context-window fill, reported once a turn's result arrives. */
+  onContextUsage?: (usage: ContextUsage) => void;
+  /** Live CLI status; `compacting` is what drives the island's animation. */
+  onStatusChange?: (status: SDKStatus) => void;
 }
 
 /**

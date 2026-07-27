@@ -2,9 +2,12 @@ import type {
   AllMessage,
   ChatMessage,
   ThinkingMessage,
+  ModelUsage,
   SDKMessage,
+  SDKStatus,
   TimestampedSDKMessage,
 } from "../types";
+import { readContextUsage, type ContextUsage } from "./contextUsage";
 import {
   convertSystemMessage,
   convertResultMessage,
@@ -46,6 +49,10 @@ export const NON_DISPLAYED_SYSTEM_SUBTYPES: readonly string[] = [
   // subdirectory). Carries a whole command array, so leaving it unlisted dumps
   // the entire catalogue into the transcript as JSON.
   "commands_changed",
+  // Live status ('requesting' / 'compacting'). It drives the composer's
+  // context island; rendering it in the transcript would add a JSON dump per
+  // turn.
+  "status",
 ];
 
 const NON_DISPLAYED_SYSTEM_SUBTYPE_SET: ReadonlySet<string> = new Set(
@@ -76,6 +83,12 @@ export interface ProcessingContext {
   // Current assistant message state (for streaming)
   currentAssistantMessage?: ChatMessage | null;
   setCurrentAssistantMessage?: (message: ChatMessage | null) => void;
+
+  // Composer status island
+  /** Context-window fill, reported once a turn's result arrives. */
+  onContextUsage?: (usage: ContextUsage) => void;
+  /** Live CLI status; `compacting` is what drives the island's animation. */
+  onStatusChange?: (status: SDKStatus) => void;
 
   // Session handling
   onSessionId?: (sessionId: string) => void;
@@ -358,6 +371,13 @@ export class UnifiedMessageProcessor {
       context.setHasReceivedInit?.(true);
     }
 
+    // Reported before the display filter below, for the same reason `init` is:
+    // suppressing a subtype from the transcript must not suppress its effects.
+    if (message.subtype === "status") {
+      const status = (message as { status?: SDKStatus }).status ?? null;
+      context.onStatusChange?.(status);
+    }
+
     if (isNonDisplayedSystemSubtype(message.subtype)) {
       return;
     }
@@ -461,6 +481,16 @@ export class UnifiedMessageProcessor {
     const timestamp = options.timestamp || Date.now();
     const resultMessage = convertResultMessage(message, timestamp);
     context.addMessage(resultMessage);
+
+    // The result is where per-model token usage lands, so it is the only point
+    // the context-window figure can be refreshed from.
+    const usage = readContextUsage(
+      (message as { modelUsage?: Record<string, ModelUsage> }).modelUsage,
+    );
+    if (usage) context.onContextUsage?.(usage);
+
+    // A turn ending means nothing is in flight, whatever the last status said.
+    context.onStatusChange?.(null);
 
     // Clear current assistant message (streaming only)
     if (options.isStreaming) {

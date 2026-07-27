@@ -1152,3 +1152,74 @@ body,
   flex-direction: column;
   gap: var(--spacing-1);
 }
+
+/*
+ * Context island.
+ *
+ * One slot beside the model control that swaps what it shows as state changes.
+ * Sized to its widest state so the composer footer does not shift when it
+ * switches between a percentage and "Compacting…".
+ */
+.context-island {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  min-width: 9rem;
+  padding: var(--spacing-1) var(--spacing-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background-color: var(--color-background-surface);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.context-island-meter {
+  position: relative;
+  inline-size: 3rem;
+  block-size: 0.375rem;
+  border-radius: var(--radius-full);
+  background-color: var(--color-overlay-hover);
+  overflow: hidden;
+}
+
+.context-island-fill {
+  display: block;
+  block-size: 100%;
+  border-radius: inherit;
+  background-color: var(--color-text-secondary);
+  transition: inline-size var(--duration-medium) var(--ease-standard);
+}
+
+/* The bar carries the warning, not the text: colour alone must not be the
+   only signal, and the percentage is always readable beside it. */
+.context-island[data-level="warn"] .context-island-fill {
+  background-color: var(--color-text-orange);
+}
+
+.context-island[data-level="high"] .context-island-fill {
+  background-color: var(--color-text-red);
+}
+
+.context-island-label {
+  color: var(--color-text-disabled);
+}
+
+.context-island-spinner {
+  display: inline-flex;
+  animation: context-island-spin var(--duration-slow) linear infinite;
+}
+
+@keyframes context-island-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Respect a user who has asked for less motion; the text still says what is
+   happening. */
+@media (prefers-reduced-motion: reduce) {
+  .context-island-spinner {
+    animation: none;
+  }
+}

@@ -32,7 +32,8 @@ import { ConversationSidebar } from "./chat/ConversationSidebar";
 import { RenameConversationDialog } from "./chat/RenameConversationDialog";
 import { FilesPanel } from "./chat/FilesPanel";
 import { collectConversationFiles } from "../utils/conversationFiles";
-import type { ConversationSummary } from "../types";
+import type { ConversationSummary, SDKStatus } from "../types";
+import type { ContextUsage } from "../utils/contextUsage";
 import { SettingsButton } from "./SettingsButton";
 import { SettingsModal } from "./SettingsModal";
 import { ChatInput } from "./chat/ChatInput";
@@ -99,6 +100,10 @@ export function ChatPage() {
   }, [workingDirectory, projects]);
 
   const [conversationSearch, setConversationSearch] = useState("");
+  // Reported by the CLI, not derived here: usage arrives with each turn's
+  // result, status while a turn is in flight.
+  const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
+  const [cliStatus, setCliStatus] = useState<SDKStatus>(null);
 
   const {
     conversations,
@@ -267,6 +272,8 @@ export function ChatPage() {
           addMessage,
           updateLastMessage,
           onSessionId: setCurrentSessionId,
+          onContextUsage: setContextUsage,
+          onStatusChange: setCliStatus,
           shouldShowInitMessage: () => !hasShownInitMessage,
           onInitMessageShown: () => setHasShownInitMessage(true),
           get hasReceivedInit() {
@@ -799,6 +806,8 @@ export function ChatPage() {
                     isUploadingAttachments={isUploadingAttachments}
                     onAttachFiles={(files) => void addAttachments(files)}
                     onRemoveAttachment={removeAttachment}
+                    contextUsage={contextUsage}
+                    cliStatus={cliStatus}
                   />
                 }
               >

@@ -6,6 +6,7 @@ import type { SDKMessage } from "../../types";
 import { generateId } from "../../utils/id";
 import {
   makeAPIAssistantMessage,
+  makeResultUsage,
   makeTextBlock,
   type APIContentBlock,
 } from "../../utils/sdkFixtures";
@@ -543,6 +544,107 @@ describe("useStreamParser", () => {
       expect(mockContext.addMessage).not.toHaveBeenCalled();
 
       warn.mockRestore();
+    });
+  });
+
+  /**
+   * These two callbacks reach the processor through `adaptContext`, which
+   * copies StreamingContext field by field. Every field is optional, so
+   * forgetting one there compiles cleanly and simply never fires — which is
+   * exactly how the context island shipped inert the first time. Assert the
+   * hand-off end to end rather than trusting the types.
+   */
+  describe("composer status surface", () => {
+    it("reports context usage from a result message", () => {
+      const { result } = renderHook(() => useStreamParser());
+      const onContextUsage = vi.fn();
+
+      const resultMessage: SDKMessage = {
+        type: "result",
+        subtype: "success",
+        duration_ms: 1000,
+        duration_api_ms: 800,
+        is_error: false,
+        num_turns: 1,
+        result: "done",
+        stop_reason: "end_turn",
+        modelUsage: {
+          "claude-opus-5": {
+            inputTokens: 500,
+            outputTokens: 100,
+            cacheReadInputTokens: 1500,
+            cacheCreationInputTokens: 0,
+            webSearchRequests: 0,
+            costUSD: 0.01,
+            contextWindow: 10000,
+            maxOutputTokens: 64000,
+          },
+        },
+        session_id: "s1",
+        uuid: generateId(),
+        total_cost_usd: 0.01,
+        usage: makeResultUsage(),
+        permission_denials: [],
+      };
+
+      result.current.processStreamLine(
+        JSON.stringify({ type: "claude_json", data: resultMessage }),
+        { ...mockContext, onContextUsage },
+      );
+
+      // 500 input + 1500 cache read against a 10k window.
+      expect(onContextUsage).toHaveBeenCalledWith(
+        expect.objectContaining({ percent: 20, contextWindow: 10000 }),
+      );
+    });
+
+    it("reports compaction status, then clears it when the turn ends", () => {
+      const { result } = renderHook(() => useStreamParser());
+      const onStatusChange = vi.fn();
+      const context = { ...mockContext, onStatusChange };
+
+      result.current.processStreamLine(
+        JSON.stringify({
+          type: "claude_json",
+          data: {
+            type: "system",
+            subtype: "status",
+            status: "compacting",
+            session_id: "s1",
+            uuid: generateId(),
+          },
+        }),
+        context,
+      );
+
+      expect(onStatusChange).toHaveBeenCalledWith("compacting");
+      // Purely internal telemetry: it drives the island, it is not transcript.
+      expect(context.addMessage).not.toHaveBeenCalled();
+
+      result.current.processStreamLine(
+        JSON.stringify({
+          type: "claude_json",
+          data: {
+            type: "result",
+            subtype: "success",
+            duration_ms: 1,
+            duration_api_ms: 1,
+            is_error: false,
+            num_turns: 1,
+            result: "done",
+            stop_reason: "end_turn",
+            modelUsage: {},
+            session_id: "s1",
+            uuid: generateId(),
+            total_cost_usd: 0,
+            usage: makeResultUsage(),
+            permission_denials: [],
+          },
+        }),
+        context,
+      );
+
+      expect(onStatusChange).toHaveBeenLastCalledWith(null);
     });
   });
 });

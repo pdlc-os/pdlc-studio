@@ -71,6 +71,13 @@ export function useStreamParser() {
         // Permission/Error handling
         onPermissionError: context.onPermissionError,
         onAbortRequest: context.onAbortRequest,
+
+        // Composer status surface. Note this adapter copies field by field and
+        // every field is optional, so a callback missing here is silently
+        // dropped rather than caught by the type checker — add new ones in both
+        // places.
+        onContextUsage: context.onContextUsage,
+        onStatusChange: context.onStatusChange,
       };
     },
     [],

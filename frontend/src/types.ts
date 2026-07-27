@@ -298,6 +298,8 @@ export type {
 
 // Re-export SDK types
 export type {
+  ModelUsage,
+  SDKStatus,
   SDKMessage,
   SDKSystemMessage,
   SDKResultMessage,

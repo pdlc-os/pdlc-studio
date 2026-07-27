@@ -22,8 +22,10 @@ import { SlashCommandMenu } from "./SlashCommandMenu";
 import { ComposerHighlight } from "./ComposerHighlight";
 import { AttachmentTray } from "./AttachmentTray";
 import { ModelSelector } from "./ModelSelector";
+import { ContextIsland } from "./ContextIsland";
 import { useSettings } from "../../hooks/useSettings";
-import type { AttachmentInfo } from "../../types";
+import type { AttachmentInfo, SDKStatus } from "../../types";
+import type { ContextUsage } from "../../utils/contextUsage";
 import type { PermissionMode } from "../../types";
 
 interface PermissionData {
@@ -78,6 +80,9 @@ interface ChatInputProps {
   isUploadingAttachments?: boolean;
   onAttachFiles?: (files: File[]) => void;
   onRemoveAttachment?: (path: string) => void;
+  /** Drives the composer's status island. */
+  contextUsage?: ContextUsage | null;
+  cliStatus?: SDKStatus;
 }
 
 /**
@@ -140,6 +145,8 @@ export function ChatInput({
   isUploadingAttachments = false,
   onAttachFiles,
   onRemoveAttachment,
+  contextUsage = null,
+  cliStatus = null,
 }: ChatInputProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [isComposing, setIsComposing] = useState(false);
@@ -469,6 +476,7 @@ export function ChatInput({
             />
           ) : (
             <HStack gap={2} vAlign="center">
+              <ContextIsland usage={contextUsage} status={cliStatus} />
               <ModelSelector
                 models={models}
                 model={model}
