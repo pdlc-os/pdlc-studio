@@ -1164,7 +1164,10 @@ body,
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-2);
-  min-width: 12rem;
+  /* Fixed rather than a min-width: the island swaps between readings of
+     different lengths ("4%" / "100%" / "Compacting…"), and a box that resized
+     under them would shove the model selector sideways mid-turn. */
+  inline-size: 12rem;
   padding: var(--spacing-1) var(--spacing-2);
   border: 1px solid var(--color-border);
   /* A rounded rectangle rather than a pill, so it reads as the same family of
@@ -1180,11 +1183,12 @@ body,
   white-space: nowrap;
 }
 
+/* The bar takes whatever the text does not, so the island's length goes into
+   the one part of it that carries information and never into a dead gap. */
 .context-island-meter {
   position: relative;
-  /* Grows with the island so the extra length goes into the reading rather
-     than into empty space. The meter stays a pill — it is a bar, not a panel. */
-  inline-size: 4rem;
+  flex: 1 1 auto;
+  min-inline-size: 2.5rem;
   block-size: 0.375rem;
   border-radius: var(--radius-full);
   background-color: var(--color-overlay-hover);
@@ -1209,8 +1213,24 @@ body,
   background-color: var(--color-text-red);
 }
 
+/* Tabular figures and a floor wide enough for "100%", so the meter beside it
+   does not resize every time the reading crosses a digit boundary. */
+.context-island-percent {
+  flex: none;
+  min-inline-size: 2.25rem;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
 .context-island-label {
+  flex: none;
   color: var(--color-text-disabled);
+}
+
+/* Nothing here can stretch, so centring is what keeps the slack off one
+   side rather than pooling it all at the end. */
+.context-island[data-state="compacting"] {
+  justify-content: center;
 }
 
 .context-island-spinner {

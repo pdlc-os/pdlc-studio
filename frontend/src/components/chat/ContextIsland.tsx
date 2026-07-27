@@ -79,7 +79,7 @@ export function ContextIsland({ usage, status }: ContextIslandProps) {
             style={{ inlineSize: `${percent}%` }}
           />
         </span>
-        <span>{percent}%</span>
+        <span className="context-island-percent">{percent}%</span>
         <span className="context-island-label">context</span>
       </span>
     </Tooltip>
