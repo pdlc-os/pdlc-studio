@@ -761,3 +761,394 @@ body,
 .conversation-typography[data-font="dyslexic"] {
   --conversation-font-family: OpenDyslexic, "Comic Sans MS", sans-serif;
 }
+
+/*
+ * Conversation sidebar (chat route).
+ *
+ * The chat route becomes two columns: conversations on the left, the
+ * transcript on the right. Astryx has no split-shell primitive, so the frame
+ * lives here and everything inside is composed from Astryx components.
+ */
+.chat-shell {
+  display: grid;
+  grid-template-columns: 17rem 1fr;
+  flex: 1;
+  min-height: 0;
+  gap: var(--spacing-3);
+}
+
+/* Below this the sidebar would leave the transcript too narrow to read. */
+@media (max-width: 860px) {
+  .chat-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .conversation-sidebar {
+    display: none;
+  }
+}
+
+/*
+ * Panes read as separate surfaces in both schemes, but the two schemes need
+ * opposite treatments to get there.
+ *
+ * Dark already separated on its own: --color-background-surface is lighter
+ * than the page, so a raised pane reads immediately.
+ *
+ * Light did not, at all. Measured, the shell, the sidebar and the transcript
+ * were all rgb(241,241,241) — a contrast ratio of exactly 1.000 — with a
+ * border at 1.055, which is invisible. So in light the panes take the white
+ * card colour and sit on the grey page like sheets on a desk, and the border
+ * steps up to --color-border-emphasized (1.312 against the page, versus the
+ * default border's 1.055).
+ */
+.conversation-sidebar,
+.chat-shell > .app-chat-region {
+  border: 1px solid
+    light-dark(var(--color-border-emphasized), var(--color-border));
+  border-radius: var(--radius-container);
+  background-color: light-dark(
+    var(--color-background-card),
+    var(--color-background-surface)
+  );
+}
+
+.conversation-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The transcript pane needs breathing room now that it has an edge. */
+.chat-shell > .app-chat-region {
+  padding: var(--spacing-3);
+}
+
+.conversation-sidebar-header {
+  padding: var(--spacing-3);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.conversation-sidebar-project {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2) var(--spacing-3);
+  border-block-end: 1px solid var(--color-border);
+  /* Signals the row is a right-click target for the project-level action. */
+  cursor: context-menu;
+}
+
+/* Only the list scrolls, so the header and New Session stay put. */
+.conversation-sidebar-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.conversation-list {
+  margin: 0;
+  padding: var(--spacing-1);
+  list-style: none;
+}
+
+.conversation-item {
+  border-radius: var(--radius-element);
+}
+
+.conversation-item[data-selected="true"] {
+  background-color: var(--color-overlay-hover);
+}
+
+.conversation-item-button {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-0-5);
+  width: 100%;
+  padding: var(--spacing-2) var(--spacing-3);
+  border: none;
+  border-radius: inherit;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.conversation-item-button:hover {
+  background-color: var(--color-overlay-hover);
+}
+
+.conversation-item-button:focus-visible {
+  outline: 2px solid var(--color-border-emphasized);
+  outline-offset: -2px;
+}
+
+/*
+ * One line with an ellipsis. Titles are arbitrary length — a generated one is
+ * a whole sentence — and wrapping would make the list scan as paragraphs.
+ */
+.conversation-item-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
+}
+
+.conversation-item-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.conversation-sidebar-footer {
+  padding: var(--spacing-3);
+  border-block-start: 1px solid var(--color-border);
+}
+
+.conversation-sidebar-footer .astryx-button {
+  width: 100%;
+}
+
+/*
+ * Composer attachments.
+ *
+ * The whole composer is the drop target, not just the textarea: a file
+ * released anywhere over it should attach, which is what people expect and
+ * what the alternative (a small precise target) gets wrong.
+ */
+.chat-composer-anchor[data-dragging="true"] {
+  outline: 2px dashed var(--color-border-emphasized);
+  outline-offset: var(--spacing-1);
+  border-radius: var(--radius-container);
+}
+
+.composer-drop-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-container);
+  background-color: var(--color-overlay-hover);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  /* Must not swallow the drop event it is describing. */
+  pointer-events: none;
+}
+
+.attachment-tray {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin-block-end: var(--spacing-2);
+}
+
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: var(--spacing-1) var(--spacing-1) var(--spacing-1) var(--spacing-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background-color: var(--color-background-surface);
+  font-size: var(--font-size-sm);
+  max-width: 100%;
+}
+
+/* A long filename truncates rather than pushing the remove button off-row. */
+.attachment-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+
+.attachment-chip-size {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+/* Files tab listing. */
+.files-list {
+  margin: var(--spacing-2) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+
+.files-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  padding: var(--spacing-2) var(--spacing-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-element);
+}
+
+.files-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* Takes the slack so the origin label and actions stay right-aligned. */
+  flex: 1;
+}
+
+.files-item-name {
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
+}
+
+/* The path is the disambiguator between same-named files, so it must not wrap
+   the row onto three lines. */
+.files-item-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.files-item-origin {
+  white-space: nowrap;
+}
+
+/* Tree view: an explorer-style rendering of where generated files landed. */
+.files-tree {
+  margin-block-start: var(--spacing-2);
+}
+
+.files-tree-level {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.files-tree-dir,
+.files-tree-file {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  width: 100%;
+  padding: var(--spacing-1) var(--spacing-2);
+  border: none;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  border-radius: var(--radius-element);
+}
+
+.files-tree-dir {
+  cursor: pointer;
+}
+
+.files-tree-dir:hover,
+.files-tree-file:hover {
+  background-color: var(--color-overlay-hover);
+}
+
+.files-tree-dir:focus-visible {
+  outline: 2px solid var(--color-border-emphasized);
+  outline-offset: -2px;
+}
+
+.files-item-actions {
+  display: flex;
+  gap: var(--spacing-1);
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .files-item-origin {
+    display: none;
+  }
+}
+
+/*
+ * App name in the chat header.
+ *
+ * Two steps up the type scale and at full contrast — it is the page's primary
+ * identity, and Breadcrumbs styles its items as navigation chrome, which left
+ * the name greyer and smaller than its role.
+ */
+.app-name {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  color: light-dark(#0a0a0a, #ffffff);
+}
+
+/* Project path under the repo name in the sidebar. */
+.conversation-sidebar-path {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* Lets the path's ellipsis engage instead of the row growing to fit it. */
+.conversation-sidebar-identity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/*
+ * Conversation header: the open conversation's name and id, inside the
+ * transcript pane so they align with the messages rather than with the page
+ * header above the sidebar.
+ */
+.conversation-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-0-5);
+  padding: 0 0 var(--spacing-3);
+  border-block-end: 1px solid var(--color-border);
+  margin-block-end: var(--spacing-3);
+  /* The name is a right-click target for rename. */
+  cursor: context-menu;
+}
+
+.conversation-header-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.conversation-header-session {
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  word-break: break-all;
+}
+
+/* Search stacks above New Session in the sidebar footer. */
+.conversation-sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+/*
+ * Files sections. <section> is not a flex container, so the heading and an
+ * empty-state message ran together on one line.
+ */
+.files-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}

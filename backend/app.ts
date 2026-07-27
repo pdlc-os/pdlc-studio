@@ -22,6 +22,15 @@ import { handleHistoriesRequest } from "./handlers/histories.ts";
 import { handleConversationRequest } from "./handlers/conversations.ts";
 import { handleChatRequest } from "./handlers/chat.ts";
 import { handleCommandsRequest } from "./handlers/commands.ts";
+import {
+  handleClearConversationsRequest,
+  handleDeleteConversationRequest,
+  handleRenameConversationRequest,
+} from "./handlers/sessions.ts";
+import {
+  handleFileContentRequest,
+  handleUploadAttachmentsRequest,
+} from "./handlers/attachments.ts";
 import { handleAbortRequest } from "./handlers/abort.ts";
 import { logger } from "./utils/logger.ts";
 import { readBinaryFile } from "./utils/fs.ts";
@@ -46,7 +55,9 @@ export function createApp(
     "*",
     cors({
       origin: "*",
-      allowMethods: ["GET", "POST", "OPTIONS"],
+      // PATCH and DELETE back the session rename/delete routes; without them
+      // the preflight fails and those routes are unreachable cross-origin.
+      allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
       allowHeaders: ["Content-Type"],
     }),
   );
@@ -79,6 +90,20 @@ export function createApp(
     handleConversationRequest(c),
   );
 
+  // Session mutations, backed by the SDK so a rename here is the same
+  // operation as the CLI's /rename.
+  app.patch("/api/projects/:encodedProjectName/histories/:sessionId", (c) =>
+    handleRenameConversationRequest(c),
+  );
+
+  app.delete("/api/projects/:encodedProjectName/histories/:sessionId", (c) =>
+    handleDeleteConversationRequest(c),
+  );
+
+  app.delete("/api/projects/:encodedProjectName/histories", (c) =>
+    handleClearConversationsRequest(c),
+  );
+
   app.post("/api/abort/:requestId", (c) =>
     handleAbortRequest(c, requestAbortControllers),
   );
@@ -87,6 +112,10 @@ export function createApp(
 
   // Slash commands available to the composer's "/" picker.
   app.get("/api/commands", (c) => handleCommandsRequest(c));
+
+  // Attachments: upload for the next message, and read back for the Files tab.
+  app.post("/api/attachments", (c) => handleUploadAttachmentsRequest(c));
+  app.get("/api/files", (c) => handleFileContentRequest(c));
 
   // Static file serving with SPA fallback
   const serveStatic = runtime.createStaticFileMiddleware({

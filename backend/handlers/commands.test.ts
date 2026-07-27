@@ -86,6 +86,9 @@ describe("handleCommandsRequest", () => {
           aliases: ["cost"],
         },
       ],
+      // Absent from this mock's initialize response, which an older CLI may
+      // also omit — that must mean "no models", not a failed discovery.
+      models: [],
     });
   });
 
@@ -125,7 +128,7 @@ describe("handleCommandsRequest", () => {
     await handleCommandsRequest(c);
 
     // A missing picker must not surface as an error over a usable chat.
-    expect(c.json).toHaveBeenCalledWith({ commands: [] });
+    expect(c.json).toHaveBeenCalledWith({ commands: [], models: [] });
     expect(close).toHaveBeenCalled();
   });
 
@@ -150,3 +153,53 @@ describe("handleCommandsRequest", () => {
     expect(mockQuery).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("model discovery", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns the models the CLI reports, with their capabilities", async () => {
+    // One handshake carries both commands and models, so the UI can offer a
+    // model picker without a second CLI process.
+    mockSession(() =>
+      Promise.resolve({
+        commands: [],
+        models: [
+          {
+            value: "opus",
+            displayName: "Opus",
+            description: "Most capable",
+            supportsEffort: true,
+            supportedEffortLevels: ["low", "high"],
+            supportsAdaptiveThinking: true,
+          },
+          { value: "haiku", displayName: "Haiku", description: "Fastest" },
+        ],
+      }),
+    );
+    const c = makeContext("/tmp/models");
+
+    await handleCommandsRequest(c);
+
+    const payload = (c.json as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as UploadShape;
+    expect(payload.models).toEqual([
+      {
+        value: "opus",
+        displayName: "Opus",
+        description: "Most capable",
+        supportsEffort: true,
+        supportedEffortLevels: ["low", "high"],
+        supportsAdaptiveThinking: true,
+      },
+      // Capability flags are omitted rather than guessed when the CLI does not
+      // report them.
+      { value: "haiku", displayName: "Haiku", description: "Fastest" },
+    ]);
+  });
+});
+
+/** Shape of the JSON the handler passes to `c.json`. */
+interface UploadShape {
+  commands: unknown[];
+  models: unknown[];
+}

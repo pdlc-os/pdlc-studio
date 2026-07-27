@@ -4,6 +4,7 @@ import {
   waitFor,
   fireEvent,
   act,
+  within,
 } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useState } from "react";
@@ -71,8 +72,23 @@ async function renderHarness(props: { onSubmit?: () => void } = {}) {
   return utils;
 }
 
+/**
+ * Options *within the slash menu*.
+ *
+ * The model selector beside Send is built from Selectors, which put their own
+ * `role="option"` nodes in the DOM, so an unscoped query counts those too.
+ */
+function slashOptions() {
+  const menu = screen.queryByTestId("slash-command-menu");
+  return menu ? within(menu).queryAllByRole("option") : [];
+}
+
 function getTextarea() {
-  return screen.getByRole("combobox") as HTMLTextAreaElement;
+  // Named explicitly: the model selector's dropdowns are comboboxes too, so a
+  // bare role query is ambiguous once the composer has one beside Send.
+  return screen.getByRole("combobox", {
+    name: "Message",
+  }) as HTMLTextAreaElement;
 }
 
 describe("ChatInput slash command picker", () => {
@@ -94,7 +110,7 @@ describe("ChatInput slash command picker", () => {
     await waitFor(() => {
       expect(screen.getByTestId("slash-command-menu")).toBeInTheDocument();
     });
-    expect(screen.getAllByRole("option")).toHaveLength(COMMANDS.length);
+    expect(slashOptions()).toHaveLength(COMMANDS.length);
   });
 
   it("narrows the list as the query is typed", async () => {
@@ -102,9 +118,9 @@ describe("ChatInput slash command picker", () => {
     fireEvent.change(getTextarea(), { target: { value: "/comp" } });
 
     await waitFor(() => {
-      expect(screen.getAllByRole("option")).toHaveLength(1);
+      expect(slashOptions()).toHaveLength(1);
     });
-    expect(screen.getByRole("option")).toHaveTextContent("compact");
+    expect(slashOptions()[0]).toHaveTextContent("compact");
   });
 
   it("selects a command without typing its full name", async () => {
@@ -113,7 +129,7 @@ describe("ChatInput slash command picker", () => {
     fireEvent.change(getTextarea(), { target: { value: "/srev" } });
 
     await waitFor(() => {
-      expect(screen.getByRole("option")).toHaveTextContent("security-review");
+      expect(slashOptions()[0]).toHaveTextContent("security-review");
     });
 
     fireEvent.keyDown(getTextarea(), { key: "Enter" });
@@ -125,19 +141,16 @@ describe("ChatInput slash command picker", () => {
     fireEvent.change(getTextarea(), { target: { value: "/c" } });
 
     await waitFor(() => {
-      expect(screen.getAllByRole("option").length).toBeGreaterThan(1);
+      expect(slashOptions().length).toBeGreaterThan(1);
     });
 
     // Both "clear" and "compact" prefix-match "c"; the shorter name ranks
     // first, so arrowing down once lands on "compact".
-    const options = screen.getAllByRole("option");
+    const options = slashOptions();
     expect(options[0]).toHaveAttribute("aria-selected", "true");
 
     fireEvent.keyDown(getTextarea(), { key: "ArrowDown" });
-    expect(screen.getAllByRole("option")[1]).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(slashOptions()[1]).toHaveAttribute("aria-selected", "true");
 
     fireEvent.keyDown(getTextarea(), { key: "Enter" });
     expect(getTextarea().value).toBe("/compact ");
@@ -230,7 +243,7 @@ describe("ChatInput command highlighting", () => {
     fireEvent.change(getTextarea(), { target: { value: "/sec" } });
 
     await waitFor(() => {
-      expect(screen.getByRole("option")).toHaveTextContent("security-review");
+      expect(slashOptions()[0]).toHaveTextContent("security-review");
     });
     fireEvent.keyDown(getTextarea(), { key: "Enter" });
 
@@ -305,5 +318,53 @@ describe("ChatInput auto-resize", () => {
     });
     fireEvent.change(textarea, { target: { value: "" } });
     expect(textarea.style.height).toBe("40px");
+  });
+});
+
+describe("ChatInput permission mode tag", () => {
+  beforeEach(() => {
+    mockCommands([]);
+  });
+
+  it("shows the tag for each mode, and explains it to assistive tech", async () => {
+    // The visible tag is intentionally terse, so the accessible name has to
+    // carry the meaning — and must still contain the visible text, or
+    // speech-input users cannot name the control they can see.
+    const cases = [
+      ["bypassPermissions", "#YOLO", "bypass permissions"],
+      ["default", "#Classic", "normal mode"],
+      ["plan", "#Plan", "plan mode"],
+      ["acceptEdits", "#Auto", "accept edits"],
+    ] as const;
+
+    for (const [mode, tag, description] of cases) {
+      const { unmount } = render(
+        <MemoryRouter>
+          <SettingsProvider>
+            <AstryxProvider>
+              <ChatInput
+                input=""
+                isLoading={false}
+                currentRequestId={null}
+                onInputChange={vi.fn()}
+                onSubmit={vi.fn()}
+                onAbort={vi.fn()}
+                permissionMode={mode}
+                onPermissionModeChange={vi.fn()}
+              />
+            </AstryxProvider>
+          </SettingsProvider>
+        </MemoryRouter>,
+      );
+
+      const toggle = screen.getByTestId("permission-mode-toggle");
+      expect(toggle).toHaveTextContent(tag);
+
+      const name = toggle.getAttribute("aria-label") ?? "";
+      expect(name).toContain(tag);
+      expect(name).toContain(description);
+
+      unmount();
+    }
   });
 });

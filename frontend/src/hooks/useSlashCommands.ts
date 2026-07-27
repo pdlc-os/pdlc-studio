@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { getCommandsUrl } from "../config/api";
-import type { SlashCommandInfo, SlashCommandsResponse } from "../types";
+import type {
+  ModelOption,
+  SlashCommandInfo,
+  SlashCommandsResponse,
+} from "../types";
 
 /**
  * Loads the slash commands the user's Claude CLI exposes for a directory.
@@ -15,6 +19,8 @@ import type { SlashCommandInfo, SlashCommandsResponse } from "../types";
  */
 export function useSlashCommands(workingDirectory?: string) {
   const [commands, setCommands] = useState<SlashCommandInfo[]>([]);
+  // Models ride along on the same response: one CLI handshake reports both.
+  const [models, setModels] = useState<ModelOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -27,12 +33,18 @@ export function useSlashCommands(workingDirectory?: string) {
     setIsLoading(true);
 
     fetch(getCommandsUrl(workingDirectory), { signal: abortController.signal })
-      .then((response) => (response.ok ? response.json() : { commands: [] }))
+      .then((response) =>
+        response.ok ? response.json() : { commands: [], models: [] },
+      )
       .then((data: SlashCommandsResponse) => {
-        if (isCurrent) setCommands(data.commands ?? []);
+        if (!isCurrent) return;
+        setCommands(data.commands ?? []);
+        setModels(data.models ?? []);
       })
       .catch(() => {
-        if (isCurrent) setCommands([]);
+        if (!isCurrent) return;
+        setCommands([]);
+        setModels([]);
       })
       .finally(() => {
         if (isCurrent) setIsLoading(false);
@@ -44,5 +56,5 @@ export function useSlashCommands(workingDirectory?: string) {
     };
   }, [workingDirectory]);
 
-  return { commands, isLoading };
+  return { commands, models, isLoading };
 }

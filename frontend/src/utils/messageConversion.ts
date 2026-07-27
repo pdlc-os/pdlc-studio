@@ -11,6 +11,7 @@ import type {
 } from "../types";
 import { MESSAGE_CONSTANTS } from "./constants";
 import { formatToolArguments } from "./toolUtils";
+import { parseRedirectTargets } from "./shellRedirects";
 import { UnifiedMessageProcessor } from "./UnifiedMessageProcessor";
 
 // Generate a summary from tool result content
@@ -75,12 +76,49 @@ export function createToolMessage(
 ): ToolMessage {
   const toolName = contentItem.name || "Unknown";
   const argsDisplay = formatToolArguments(contentItem.input);
+  const filePath = extractWrittenPath(toolName, contentItem.input);
+
+  // Bash has no structured path, so the command is parsed for redirections.
+  const command = contentItem.input?.command;
+  const redirectPaths =
+    toolName === "Bash" && typeof command === "string"
+      ? parseRedirectTargets(command)
+      : [];
 
   return {
     type: "tool",
     content: `${toolName}${argsDisplay}`,
     timestamp: timestamp ?? Date.now(),
+    toolName,
+    ...(filePath ? { filePath } : {}),
+    ...(redirectPaths.length > 0 ? { redirectPaths } : {}),
   };
+}
+
+/**
+ * Tools that produce or change a file on disk, and the input field naming it.
+ *
+ * Deliberately a fixed list rather than "any input with a path-shaped field":
+ * Read and Grep also carry `file_path`, and listing those in a tab called
+ * Files would imply Claude created them.
+ */
+const FILE_WRITING_TOOLS: Record<string, string> = {
+  Write: "file_path",
+  Edit: "file_path",
+  MultiEdit: "file_path",
+  NotebookEdit: "notebook_path",
+};
+
+/** The path a file-producing tool wrote, or undefined for every other tool. */
+export function extractWrittenPath(
+  toolName: string,
+  input: Record<string, unknown> | undefined,
+): string | undefined {
+  const field = FILE_WRITING_TOOLS[toolName];
+  if (!field || !input) return undefined;
+
+  const value = input[field];
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
 }
 
 /**
@@ -91,6 +129,7 @@ export function createToolResultMessage(
   content: string,
   timestamp?: number,
   toolUseResult?: unknown,
+  filePath?: string,
 ): ToolResultMessage {
   const summary = generateSummary(content);
 
@@ -99,6 +138,7 @@ export function createToolResultMessage(
     toolName,
     content,
     summary,
+    ...(filePath ? { filePath } : {}),
     timestamp: timestamp ?? Date.now(),
     toolUseResult,
   };

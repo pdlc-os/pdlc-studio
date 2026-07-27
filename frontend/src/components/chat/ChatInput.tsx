@@ -2,6 +2,10 @@ import React, { useRef, useEffect, useState, useMemo, useId } from "react";
 import { ChatComposer } from "@astryxdesign/core/Chat";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { Button } from "@astryxdesign/core/Button";
+import { HStack } from "@astryxdesign/core/HStack";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { Icon } from "@astryxdesign/core/Icon";
+import { Paperclip } from "lucide-react";
 import { KEYBOARD_SHORTCUTS } from "../../utils/constants";
 import { useEnterBehavior } from "../../hooks/useSettings";
 import { useSlashCommands } from "../../hooks/useSlashCommands";
@@ -16,6 +20,10 @@ import { PermissionInputPanel } from "./PermissionInputPanel";
 import { PlanPermissionInputPanel } from "./PlanPermissionInputPanel";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import { ComposerHighlight } from "./ComposerHighlight";
+import { AttachmentTray } from "./AttachmentTray";
+import { ModelSelector } from "./ModelSelector";
+import { useSettings } from "../../hooks/useSettings";
+import type { AttachmentInfo } from "../../types";
 import type { PermissionMode } from "../../types";
 
 interface PermissionData {
@@ -64,35 +72,41 @@ interface ChatInputProps {
   planPermissionData?: PlanPermissionData;
   /** Scopes slash-command discovery; project-local commands depend on it. */
   workingDirectory?: string;
+  /** Files staged for the next message. */
+  attachments?: AttachmentInfo[];
+  attachmentError?: string | null;
+  isUploadingAttachments?: boolean;
+  onAttachFiles?: (files: File[]) => void;
+  onRemoveAttachment?: (path: string) => void;
 }
 
-// Get permission mode status indicator (CLI-style)
-const getPermissionModeIndicator = (mode: PermissionMode): string => {
-  switch (mode) {
-    case "default":
-      return "🔧 normal mode";
-    case "plan":
-      return "⏸ plan mode";
-    case "acceptEdits":
-      return "⏵⏵ accept edits";
-    case "bypassPermissions":
-      return "⚠ bypass permissions";
-  }
+/**
+ * The footer's permission-mode control.
+ *
+ * `tag` is what shows under the composer; `description` says what the tag
+ * actually means and is only used to build the accessible name. Keeping both
+ * in one table stops the label and its announcement drifting apart, which is
+ * how a screen reader ends up describing a mode the screen does not show.
+ *
+ * The visible tag is deliberately part of the accessible name too: an
+ * accessible name that shares no words with the visible label breaks
+ * speech-input users, who say what they can see.
+ */
+const PERMISSION_MODE_LABELS: Record<
+  PermissionMode,
+  { tag: string; description: string }
+> = {
+  bypassPermissions: { tag: "#YOLO", description: "bypass permissions" },
+  default: { tag: "#Classic", description: "normal mode" },
+  plan: { tag: "#Plan", description: "plan mode" },
+  acceptEdits: { tag: "#Auto", description: "accept edits" },
 };
 
-// Get clean permission mode name (without emoji)
-const getPermissionModeName = (mode: PermissionMode): string => {
-  switch (mode) {
-    case "default":
-      return "normal mode";
-    case "plan":
-      return "plan mode";
-    case "acceptEdits":
-      return "accept edits";
-    case "bypassPermissions":
-      return "bypass permissions";
-  }
-};
+const getPermissionModeIndicator = (mode: PermissionMode): string =>
+  PERMISSION_MODE_LABELS[mode].tag;
+
+const getPermissionModeName = (mode: PermissionMode): string =>
+  PERMISSION_MODE_LABELS[mode].description;
 
 // Get next permission mode for cycling.
 // bypassPermissions is included so a user who cycles away from the default can
@@ -121,12 +135,18 @@ export function ChatInput({
   permissionData,
   planPermissionData,
   workingDirectory,
+  attachments = [],
+  attachmentError = null,
+  isUploadingAttachments = false,
+  onAttachFiles,
+  onRemoveAttachment,
 }: ChatInputProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [isComposing, setIsComposing] = useState(false);
   const { enterBehavior } = useEnterBehavior();
 
-  const { commands } = useSlashCommands(workingDirectory);
+  const { commands, models } = useSlashCommands(workingDirectory);
+  const { model, effortLevel, thinking, updateSettings } = useSettings();
   const listboxId = useId();
   const [selectedIndex, setSelectedIndex] = useState(0);
   // Escape hides the menu without clearing the text. Keyed on the query it was
@@ -167,6 +187,45 @@ export function ChatInput({
     // Any edit is a fresh intent to see the menu again.
     setDismissedQuery(null);
     onInputChange(value);
+  };
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  // dragenter/dragleave fire for every child element the pointer crosses, so a
+  // boolean flickers as the cursor moves over the textarea. Counting entries
+  // against leaves is what makes the highlight stable.
+  const dragDepth = useRef(0);
+
+  const canAttach = typeof onAttachFiles === "function";
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (!canAttach || !e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setIsDraggingFiles(true);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!canAttach || !e.dataTransfer.types.includes("Files")) return;
+    // Without this the browser navigates to the dropped file instead.
+    e.preventDefault();
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!canAttach) return;
+    e.preventDefault();
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setIsDraggingFiles(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    if (!canAttach) return;
+    e.preventDefault();
+    dragDepth.current = 0;
+    setIsDraggingFiles(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) onAttachFiles?.(files);
   };
 
   const applyCommand = (match: CommandMatch) => {
@@ -301,7 +360,42 @@ export function ChatInput({
   const isStopShown = Boolean(isLoading && currentRequestId);
 
   return (
-    <div className="chat-composer-anchor">
+    <div
+      className="chat-composer-anchor"
+      data-dragging={isDraggingFiles ? "true" : undefined}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {canAttach ? (
+        <>
+          <AttachmentTray
+            attachments={attachments}
+            error={attachmentError}
+            onRemove={(path) => onRemoveAttachment?.(path)}
+          />
+          {/* The picker itself; the visible control is the footer button. */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            hidden
+            data-testid="attach-input"
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? []);
+              if (files.length > 0) onAttachFiles?.(files);
+              // Reset so picking the same file twice still fires a change.
+              e.target.value = "";
+            }}
+          />
+        </>
+      ) : null}
+      {isDraggingFiles ? (
+        <div className="composer-drop-hint" aria-hidden="true">
+          Drop files to attach
+        </div>
+      ) : null}
       {isMenuOpen ? (
         <SlashCommandMenu
           matches={matches}
@@ -374,30 +468,63 @@ export function ChatInput({
               aria-label="Stop generating (ESC)"
             />
           ) : (
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              onClick={onSubmit}
-              isDisabled={!input.trim() || isLoading}
-              data-testid="send-button"
-              label={
-                isLoading ? "..." : permissionMode === "plan" ? "Plan" : "Send"
-              }
-            />
+            <HStack gap={2} vAlign="center">
+              <ModelSelector
+                models={models}
+                model={model}
+                effortLevel={effortLevel}
+                thinking={thinking}
+                onModelChange={(value) => updateSettings({ model: value })}
+                onEffortChange={(value) =>
+                  updateSettings({ effortLevel: value })
+                }
+                onThinkingChange={(value) =>
+                  updateSettings({ thinking: value })
+                }
+                isDisabled={isLoading}
+              />
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={onSubmit}
+                isDisabled={!input.trim() || isLoading}
+                data-testid="send-button"
+                label={
+                  isLoading
+                    ? "..."
+                    : permissionMode === "plan"
+                      ? "Plan"
+                      : "Send"
+                }
+              />
+            </HStack>
           )
         }
         footerActions={
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() =>
-              onPermissionModeChange(getNextPermissionMode(permissionMode))
-            }
-            data-testid="permission-mode-toggle"
-            label={getPermissionModeIndicator(permissionMode)}
-            aria-label={`Current: ${getPermissionModeName(permissionMode)} - Click to cycle (Ctrl+Shift+M)`}
-          />
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                onPermissionModeChange(getNextPermissionMode(permissionMode))
+              }
+              data-testid="permission-mode-toggle"
+              label={getPermissionModeIndicator(permissionMode)}
+              aria-label={`${getPermissionModeIndicator(permissionMode)} — ${getPermissionModeName(permissionMode)}. Click to cycle (Ctrl+Shift+M)`}
+            />
+            {canAttach ? (
+              <IconButton
+                onClick={() => fileInputRef.current?.click()}
+                label="Attach files"
+                variant="ghost"
+                size="sm"
+                isDisabled={isLoading || isUploadingAttachments}
+                data-testid="attach-files"
+                icon={<Icon icon={Paperclip} />}
+              />
+            ) : null}
+          </>
         }
       />
     </div>

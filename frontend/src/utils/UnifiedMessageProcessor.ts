@@ -220,12 +220,26 @@ export class UnifiedMessageProcessor {
       return;
     }
 
+    /*
+     * The path comes from the *request*, not the result: a Read returns file
+     * contents with no indication of which file. Any tool naming a path counts
+     * here — unlike the Files tab, which lists only tools that write — because
+     * the language of what is displayed depends on the file either way.
+     */
+    const toolInput = cachedToolInfo?.input as
+      | Record<string, unknown>
+      | undefined;
+    const pathCandidate = toolInput?.file_path ?? toolInput?.notebook_path;
+    const filePath =
+      typeof pathCandidate === "string" ? pathCandidate : undefined;
+
     // This is a regular tool result - create a ToolResultMessage
     const toolResultMessage = createToolResultMessage(
       toolName,
       content,
       options.timestamp,
       toolUseResult,
+      filePath,
     );
     context.addMessage(toolResultMessage);
   }

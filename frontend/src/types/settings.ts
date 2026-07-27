@@ -1,3 +1,5 @@
+import type { EffortLevel, ThinkingMode } from "../types";
+
 export type Theme = "light" | "dark";
 export type EnterBehavior = "send" | "newline";
 
@@ -66,6 +68,16 @@ export const CONVERSATION_FONT_SIZES: ReadonlyArray<{
 export interface AppSettings {
   theme: Theme;
   enterBehavior: EnterBehavior;
+  /**
+   * Generation controls for the composer.
+   *
+   * `model` is an id from the CLI's own list, so it can name a model a later
+   * upgrade removes; the selector falls back to the default when the stored id
+   * is not in the fetched list rather than sending something the CLI rejects.
+   */
+  model: string;
+  effortLevel: EffortLevel;
+  thinking: ThinkingMode;
   conversationFont: ConversationFont;
   conversationFontSize: ConversationFontSize;
   version: number;
@@ -79,6 +91,9 @@ export interface SettingsContextType {
   toggleEnterBehavior: () => void;
   conversationFont: ConversationFont;
   conversationFontSize: ConversationFontSize;
+  model: string;
+  effortLevel: EffortLevel;
+  thinking: ThinkingMode;
   updateSettings: (updates: Partial<AppSettings>) => void;
 }
 
@@ -86,6 +101,11 @@ export interface SettingsContextType {
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: "light",
   enterBehavior: "send",
+  // "default" is a real entry in the CLI's model list — the recommended one —
+  // so this is a selectable value, not a sentinel.
+  model: "default",
+  effortLevel: "medium",
+  thinking: "adaptive",
   conversationFont: "sans",
   // Medium sits in the middle of the ladder, so the control has room in both
   // directions. The ladder itself was shifted up a step in index.css rather

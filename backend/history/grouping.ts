@@ -64,6 +64,12 @@ function createConversationSummary(
     lastTime: conversationFile.lastTime,
     messageCount: conversationFile.messageCount,
     lastMessagePreview: conversationFile.lastMessagePreview,
+    ...(conversationFile.title
+      ? {
+          title: conversationFile.title,
+          isTitleCustom: conversationFile.isTitleCustom === true,
+        }
+      : {}),
   };
 }
 

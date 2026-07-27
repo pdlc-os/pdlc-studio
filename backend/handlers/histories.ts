@@ -3,6 +3,7 @@ import type { HistoryListResponse } from "../../shared/types.ts";
 import { validateEncodedProjectName } from "../history/pathUtils.ts";
 import { parseAllHistoryFiles } from "../history/parser.ts";
 import { groupConversations } from "../history/grouping.ts";
+import { conversationMatches } from "../history/search.ts";
 import { logger } from "../utils/logger.ts";
 import { stat } from "../utils/fs.ts";
 import { getHomeDir } from "../utils/os.ts";
@@ -54,11 +55,20 @@ export async function handleHistoriesRequest(c: Context) {
       throw error;
     }
 
-    const conversationFiles = await parseAllHistoryFiles(historyDir);
+    const allFiles = await parseAllHistoryFiles(historyDir);
 
-    logger.history.debug(
-      `Found ${conversationFiles.length} conversation files`,
-    );
+    logger.history.debug(`Found ${allFiles.length} conversation files`);
+
+    /*
+     * Optional content search. Filtering happens *before* grouping so a
+     * session that only matches in an earlier, superseded file still counts —
+     * grouping would have discarded that file as a duplicate.
+     */
+    const searchTerm = c.req.query("q") ?? "";
+    const conversationFiles =
+      searchTerm.trim() === ""
+        ? allFiles
+        : allFiles.filter((file) => conversationMatches(file, searchTerm));
 
     // Group conversations and remove duplicates
     const conversations = groupConversations(conversationFiles);

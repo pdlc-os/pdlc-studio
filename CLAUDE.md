@@ -422,6 +422,185 @@ CLAUDE.md handling, and the rest of Claude Code's behaviour.
 (`user`, `project`, `local`), so CLAUDE.md and `settings.json` are picked up
 without extra configuration.
 
+## New conversations and the sidebar
+
+A conversation started in this tab has **no id in the URL** — the URL stays
+`?new=1`, and the id only arrives with the SDK's init message. `activeSessionKey`
+therefore falls back to `currentSessionId`, which is what lets the sidebar
+highlight the row it just gained and the header name it. Deleting also compares
+against that key, so deleting a conversation started in this tab closes it.
+
+The URL is deliberately *not* rewritten to `?sessionId=` mid-conversation:
+`useAutoHistoryLoader` keys off that param and would refetch the transcript from
+disk over the messages already in memory.
+
+The header renders as soon as a conversation is active, showing **"Untitled
+conversation"** until the CLI generates an `ai-title`.
+
+The list refetches at two moments: the session becoming real, and a turn
+finishing. Both are needed — the first makes the conversation appear, the second
+picks up its generated name. The title is written asynchronously and not
+reliably before the result message lands, so a refetch on completion alone often
+reads the file just too early; a second pass `TITLE_SETTLE_MS` later catches it
+without polling indefinitely.
+
+## Panes and light mode
+
+The chat route's panes (sidebar, transcript) are surfaces on the page
+background. The two schemes need opposite treatments to get there: dark
+separated on its own, because `--color-background-surface` is lighter than the
+page. **Light did not separate at all** — measured, the shell, sidebar and
+transcript were all `rgb(241,241,241)`, a contrast ratio of exactly `1.000`,
+with a border at `1.055`. Light now uses the white card colour on the grey page
+and steps the border up to `--color-border-emphasized` (`1.312` versus the
+default border's `1.055`).
+
+## Model, effort and thinking
+
+The composer's control beside Send sets `model`, `effortLevel` and `thinking`
+on the chat request, persisted in `AppSettings`.
+
+**The model list comes from the CLI, not a hardcoded table.** It rides along on
+the `/api/commands` response, because `initializationResult()` reports commands
+*and* models from one handshake — a separate `/api/models` would spawn a second
+CLI process for data already in hand. Each model also reports whether it
+honours effort and adaptive thinking, so the effort control can be disabled
+rather than silently ignored. Only an explicit `supportsEffort: false` disables
+it: the CLI leaves the flag undefined for some models, and greying out a
+working control is worse than offering one the model ignores.
+
+All three are **omitted from the request unless set**, so a user's own
+`settings.json` defaults stand rather than being overridden on every message.
+
+The popover's content is mounted only while open. Astryx's `Popover` otherwise
+keeps it in the DOM, which put four comboboxes and thirteen options into the
+accessibility tree for a panel that is shut — invisible, but reachable by a
+screen reader. That is also why the composer's own tests query
+`getByRole("combobox", { name: "Message" })` and scope option lookups to the
+slash menu.
+
+## Code syntax highlighting
+
+Astryx's `CodeBlock` does the highlighting; theme-neutral supplies the colours
+as `--color-syntax-*`. Markdown fenced blocks were already covered — `Markdown`
+passes the fence's language straight through.
+
+**Do not diagnose this by looking for token `<span>`s.** In Chrome `CodeBlock`
+uses the CSS Custom Highlight API, so it colours a bare text node through
+`::highlight()` and creates no elements at all; span mode is only a fallback for
+Safari and browsers without the API. A DOM probe therefore shows an
+"unhighlighted" block that is in fact highlighted. Check a screenshot.
+
+The real gap was **tool results**. Only Edit (`diff`) and Bash (`bash`) implied a
+language, so a `Read` of a source file rendered as plaintext — which is most of
+the code this app displays. `ToolResultMessage.filePath` now carries the path
+from the *request* (a result returns contents with no indication of which file),
+and `languageFromPath` maps its extension. Any tool naming a path qualifies,
+unlike the Files tab which lists only tools that write: what is displayed needs
+a language either way.
+
+The extension table is deliberately limited to languages the CodeBlock tokenizer
+knows. Returning `undefined` for the rest keeps a misleading language label off
+the header, rather than promising highlighting that never arrives.
+
+## Conversations sidebar
+
+The chat route is two columns: the project's conversations on the left, the
+transcript on the right (`.chat-shell`). Opening a project **no longer opens a
+conversation** — arriving from the launch screen shows an empty state rather
+than starting a session the user has to abandon.
+
+Which conversation is open lives in the URL (`?sessionId=`, `?new=1`,
+`?tab=files`), so reload and the back button behave and a link is shareable.
+
+Refresh lives in the **sidebar header**, next to the project name and above
+the list it reloads — not in the page header. It replaced a `+` that duplicated
+the New Session button a few centimetres below it. Reloading matters because
+conversations are files on disk: a `claude` session started in a terminal
+writes into the same project directory, so the list can be stale through no
+fault of this page.
+
+There is **no separate conversation-history screen** any more, and no back
+button: the sidebar lists every conversation at all times, so a second place to
+browse them was redundant. `HistoryView` and `HistoryButton` were deleted with
+it; `useHistoryLoader` remains, since loading a resumed transcript is still
+needed.
+
+The conversation's name and full session id render **inside the transcript
+pane**, not in the page header — in the header they began at the far left of
+the window and read as a sibling of the app name rather than as the title of
+the pane on the right.
+
+**Search filters on content, not just titles.** The sidebar's box passes `q` to
+the existing histories endpoint, which scans each session's message text
+server-side, where that text already is. Filtering happens *before* grouping,
+so a session whose only match is in an earlier, superseded file still counts —
+grouping would have discarded that file as a duplicate. Input is debounced,
+since a hit re-scans every message of every session in the project.
+
+**Titles come from the session file**, not from the UI. Claude writes two kinds
+into the JSONL: `custom-title` (set by `/rename`) and `ai-title` (generated).
+A custom title wins; the parser takes the *last* of each, since both are
+appended per turn rather than replaced.
+
+**Rename and delete go through the SDK** (`renameSession`, `deleteSession`), so
+a rename here is the same operation as the CLI's `/rename` and shows up in
+`claude --resume`. Both deliberately omit the SDK's `dir` option: the route
+carries the *encoded* project name, and decoding it back to a path is
+ambiguous because the separator and a literal hyphen are the same character
+(`-Users-me-pdlc-studio`). Session ids are UUIDs, so an unscoped lookup is both
+simpler and correct. Clear-all enumerates the project's own history directory,
+so it cannot reach beyond the project even though each delete is unscoped.
+
+Note `getHistoriesUrl` and friends take the **encoded** name, not a filesystem
+path — the parameter was once named `projectPath`, which read as though a raw
+path would work.
+
+## Attachments and the Files tab
+
+Files are attached by dropping them anywhere on the composer or via the button
+beside the permission-mode control. They upload immediately, so the chip shows
+a real size and a failure surfaces while the user can still act on it.
+
+**Claude is given paths, not bytes.** `withAttachments` appends a labelled block
+of absolute paths to the message; the model opens what it needs with its own
+tools. That is how the CLI works with files and keeps a 20MB PDF out of the
+prompt entirely. Attachments land in a per-upload temp directory, never in the
+project — an attachment is something you are showing Claude, not a change to
+your repository.
+
+The **Files tab** splits into "Uploaded by me" and "Generated by PDLC".
+Attachments are always a flat list — they are whatever was dropped on the
+composer and have no structure. Generated files offer both a list, in the order
+they were written, and a tree, which sorts directories first and discards that
+order in favour of location. `buildFileTree` makes paths relative to the project
+root but leaves files outside it absolute, so an attachment in a temp directory
+is not misfiled under the project.
+
+Files created by **shell redirection** are picked up too, best-effort:
+`shellRedirects.ts` tokenises the Bash command (quote-aware, so `echo "a > b"`
+is not mistaken for a redirect) and takes stdout targets only. `2>`, `>&1` and
+`/dev/*` are excluded, relative targets resolve against the working directory,
+and a target that cannot be placed is dropped rather than guessed at — a row
+pointing at a file that was never written is worse than a missing row.
+
+It cannot tell whether the command ran or succeeded, and does not expand
+variables or globs or follow `cp`, `mv`, `tee`, or heredocs. Those remain
+invisible. It derives its list from the transcript: attached paths are
+parsed back out of the user's own messages, and written paths come from
+`ToolMessage.filePath`, captured at creation from the structured tool input.
+Deriving rather than keeping a side list is what makes the tab work on a
+*resumed* conversation. Only genuinely file-producing tools count
+(`Write`/`Edit`/`MultiEdit`/`NotebookEdit`) — `Read` also carries `file_path`,
+and listing it would imply Claude created the file.
+
+`GET /api/files` backs open and download. **It reads files off the machine and
+the server has no authentication**, so it is confined to the named working
+directory plus the attachments temp root, checked after resolving so `..`
+cannot climb out and with a trailing separator so `/tmp-evil` is not treated as
+inside `/tmp`. It always serves `application/octet-stream`: the bytes are
+user-supplied, and a guessed type invites the browser to execute markup.
+
 ## Composer
 
 ### Auto-growing input
