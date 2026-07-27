@@ -7,6 +7,10 @@ import type { SDKStatus } from "../../types";
 interface ContextIslandProps {
   usage: ContextUsage | null;
   status: SDKStatus;
+  /** Tasks still working, which take the island over while they run. */
+  runningAgents?: number;
+  /** Opens the Agents tab; absent outside the chat route. */
+  onShowAgents?: () => void;
 }
 
 /**
@@ -36,10 +40,15 @@ function level(percent: number): "normal" | "warn" | "high" {
  * conversation has no usage figure, and inventing a 0% would be a claim about
  * a window nothing has measured.
  */
-export function ContextIsland({ usage, status }: ContextIslandProps) {
+export function ContextIsland({
+  usage,
+  status,
+  runningAgents = 0,
+  onShowAgents,
+}: ContextIslandProps) {
   const isCompacting = status === "compacting";
 
-  if (!usage && !isCompacting) return null;
+  if (!usage && !isCompacting && runningAgents === 0) return null;
 
   if (isCompacting) {
     return (
@@ -57,6 +66,38 @@ export function ContextIsland({ usage, status }: ContextIslandProps) {
           </span>
           <span>Compacting…</span>
         </span>
+      </Tooltip>
+    );
+  }
+
+  /*
+   * Agents outrank the context reading.
+   *
+   * Both are ambient status, but only one is transient: a fan-out is the thing
+   * you want to know about while it is happening, and the percentage is still
+   * a click away in the same place. Compaction still outranks both above,
+   * since it is the state that blocks everything else.
+   */
+  if (runningAgents > 0) {
+    const noun = runningAgents === 1 ? "agent" : "agents";
+
+    return (
+      <Tooltip content="Show what the agents and workflows are doing">
+        <button
+          type="button"
+          className="context-island"
+          data-state="agents"
+          data-testid="context-island"
+          onClick={onShowAgents}
+          aria-label={`${runningAgents} ${noun} running. Show the Agents panel.`}
+          // A live region: agents come and go without the user acting, and the
+          // count changing is the only notice of it.
+          aria-live="polite"
+        >
+          <span className="context-island-pulse" aria-hidden="true" />
+          <span className="context-island-percent">{runningAgents}</span>
+          <span className="context-island-label">{noun} running</span>
+        </button>
       </Tooltip>
     );
   }

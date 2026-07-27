@@ -1405,3 +1405,177 @@ body,
     animation: none;
   }
 }
+
+/*
+ * Agents panel.
+ *
+ * Built from task telemetry rather than the transcript: a workflow fans out to
+ * agents whose work never appears as messages, so the transcript shows a long
+ * pause where this shows the tree.
+ */
+.agents-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-5);
+  padding: var(--spacing-4) var(--spacing-1);
+}
+
+.agent-group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding-block-end: var(--spacing-2);
+  border-block-end: 1px solid var(--color-border);
+  margin-block-end: var(--spacing-2);
+}
+
+.agent-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-task {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-3);
+  padding: var(--spacing-2) var(--spacing-3);
+  border-radius: var(--radius-element);
+}
+
+.agent-task:hover {
+  background-color: var(--color-overlay-hover);
+}
+
+/* Housekeeping work the SDK asks consumers to keep out of the transcript. It
+   belongs here, but should not compete with work the user asked for. */
+.agent-task[data-ambient="true"] {
+  opacity: 0.65;
+}
+
+/*
+ * Status is carried by a dot *and* by the text badge beside it, so the state
+ * never depends on colour alone.
+ */
+.agent-task-status {
+  flex: none;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  margin-block-start: 0.4rem;
+  border-radius: var(--radius-full);
+  background-color: var(--color-text-disabled);
+}
+
+.agent-task[data-status="running"] .agent-task-status {
+  background-color: var(--color-text-blue);
+  animation: agent-task-pulse var(--duration-slow) ease-in-out infinite;
+}
+
+.agent-task[data-status="paused"] .agent-task-status {
+  background-color: var(--color-text-orange);
+}
+
+.agent-task[data-status="completed"] .agent-task-status {
+  background-color: var(--color-text-green);
+}
+
+.agent-task[data-status="failed"] .agent-task-status,
+.agent-task[data-status="killed"] .agent-task-status {
+  background-color: var(--color-text-red);
+}
+
+@keyframes agent-task-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-task[data-status="running"] .agent-task-status {
+    animation: none;
+  }
+}
+
+.agent-task-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-0-5);
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-task-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-2);
+}
+
+.agent-task-title {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+
+.agent-task-badge {
+  flex: none;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.agent-task-meta,
+.agent-task-summary,
+.agent-task-retry,
+.agent-task-error {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.agent-task-meta {
+  font-family: var(--font-family-code);
+}
+
+.agent-task-retry {
+  color: var(--color-text-orange);
+}
+
+.agent-task-error {
+  color: var(--color-text-red);
+}
+
+.agent-task-actions {
+  display: flex;
+  flex: none;
+  gap: var(--spacing-1);
+}
+
+/*
+ * The island's agents state.
+ *
+ * A button here, unlike the other states, because it is the way into the panel
+ * — the count is the affordance.
+ */
+.context-island[data-state="agents"] {
+  cursor: pointer;
+  font: inherit;
+}
+
+.context-island[data-state="agents"]:hover {
+  border-color: var(--color-border-emphasized);
+}
+
+.context-island-pulse {
+  flex: none;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: var(--radius-full);
+  background-color: var(--color-text-blue);
+  animation: agent-task-pulse var(--duration-slow) ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .context-island-pulse {
+    animation: none;
+  }
+}

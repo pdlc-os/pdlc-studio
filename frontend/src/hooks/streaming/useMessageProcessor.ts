@@ -1,4 +1,5 @@
 import type { ContextUsage } from "../../utils/contextUsage";
+import type { AgentEvent } from "../../utils/agentActivity";
 import type { SDKStatus } from "../../types";
 import type { AllMessage, ChatMessage } from "../../types";
 import { useMessageConverter } from "../useMessageConverter";
@@ -25,6 +26,8 @@ export interface StreamingContext {
   onContextCompacted?: (postTokens: number) => void;
   /** Live CLI status; `compacting` is what drives the island's animation. */
   onStatusChange?: (status: SDKStatus) => void;
+  /** Task lifecycle, folded into the Agents panel's state. */
+  onAgentEvent?: (event: AgentEvent) => void;
 }
 
 /**

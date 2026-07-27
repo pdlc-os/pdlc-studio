@@ -12,6 +12,7 @@ import {
   isUserMessage,
 } from "../../utils/messageTypes";
 import type { StreamingContext } from "./useMessageProcessor";
+import { toToolProgressEvent } from "../../utils/agentEvents";
 import {
   UnifiedMessageProcessor,
   type ProcessingContext,
@@ -79,6 +80,7 @@ export function useStreamParser() {
         onContextUsage: context.onContextUsage,
         onContextCompacted: context.onContextCompacted,
         onStatusChange: context.onStatusChange,
+        onAgentEvent: context.onAgentEvent,
       };
     },
     [],
@@ -114,6 +116,20 @@ export function useStreamParser() {
             return;
           }
           break;
+        case "tool_progress": {
+          /*
+           * Its own top-level type, not a system subtype. It reports the tool a
+           * task is running and any subagent retry, which is the liveliest
+           * signal the Agents panel has — without this the panel shows a task
+           * as busy with no indication of what it is doing.
+           *
+           * Main-thread tool progress carries no task_id and is dropped by the
+           * translator.
+           */
+          const toolEvent = toToolProgressEvent(claudeData);
+          if (toolEvent) context.onAgentEvent?.(toolEvent);
+          return;
+        }
         default: {
           const { type } = claudeData as { type: string };
           // Expected traffic the UI has no rendering for — stay quiet.
