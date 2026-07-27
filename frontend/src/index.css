@@ -1154,10 +1154,29 @@ body,
   cursor: context-menu;
 }
 
+/*
+ * Title left, export right, on one line.
+ *
+ * The export control belongs at the far edge of the conversation pane rather
+ * than trailing the title: the title's width varies with the name, so a button
+ * that follows it would sit in a different place for every conversation.
+ */
+.conversation-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+}
+
 .conversation-header-title {
   font-size: var(--font-size-lg);
   font-weight: 600;
   color: var(--color-text-primary);
+  /* Yields to the button rather than pushing it off the edge. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversation-header-session {

@@ -31,6 +31,9 @@ import { useAttachments, withAttachments } from "../hooks/useAttachments";
 import { ConversationSidebar } from "./chat/ConversationSidebar";
 import { RenameConversationDialog } from "./chat/RenameConversationDialog";
 import { FilesPanel } from "./chat/FilesPanel";
+import { ExportMenu } from "./chat/ExportMenu";
+import { saveTranscript } from "../utils/saveTranscript";
+import type { ExportFormat } from "../utils/exportTranscript";
 import { collectConversationFiles } from "../utils/conversationFiles";
 import type { ConversationSummary, SDKStatus } from "../types";
 import { usageFromTokens, type ContextUsage } from "../utils/contextUsage";
@@ -550,6 +553,20 @@ export function ChatPage() {
       (conversation) => conversation.sessionId === activeSessionKey,
     ) ?? null;
 
+  const handleExport = useCallback(
+    (format: ExportFormat) => {
+      saveTranscript(format, messages, {
+        title: activeConversation?.title ?? "Untitled conversation",
+        sessionId: activeSessionKey,
+        workingDirectory: workingDirectory ?? null,
+        // Stamped at the moment of export rather than inside the serializer,
+        // which stays pure so the same messages always produce the same file.
+        exportedAt: Date.now(),
+      });
+    },
+    [messages, activeConversation, activeSessionKey, workingDirectory],
+  );
+
   /*
    * Keep the sidebar in step with the conversation being had.
    *
@@ -775,12 +792,32 @@ export function ChatPage() {
                         label: "Close conversation",
                         onClick: handleCloseConversation,
                       },
+                      { type: "divider" },
+                      {
+                        label: "Export as Markdown",
+                        onClick: () => handleExport("markdown"),
+                      },
+                      {
+                        label: "Export as HTML",
+                        onClick: () => handleExport("html"),
+                      },
+                      {
+                        label: "Export as PDF",
+                        onClick: () => handleExport("pdf"),
+                      },
                     ]}
                   >
                     <div className="conversation-header">
-                      <span className="conversation-header-title">
-                        {activeConversation?.title ?? "Untitled conversation"}
-                      </span>
+                      <div className="conversation-header-row">
+                        <span className="conversation-header-title">
+                          {activeConversation?.title ?? "Untitled conversation"}
+                        </span>
+                        {/* Nothing to write out until the conversation has content. */}
+                        <ExportMenu
+                          onExport={handleExport}
+                          isDisabled={messages.length === 0}
+                        />
+                      </div>
                       {/*
                        * In full: a truncated UUID cannot be matched against
                        * `claude --resume` output or a log line, which is the
