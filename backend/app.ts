@@ -26,6 +26,7 @@ import {
   handleClearConversationsRequest,
   handleDeleteConversationRequest,
   handleStarConversationRequest,
+  handleSessionTeamRequest,
   handleRenameConversationRequest,
 } from "./handlers/sessions.ts";
 import {
@@ -99,6 +100,10 @@ export function createApp(
 
   app.delete("/api/projects/:encodedProjectName/histories/:sessionId", (c) =>
     handleDeleteConversationRequest(c),
+  );
+
+  app.get("/api/projects/:encodedProjectName/histories/:sessionId/team", (c) =>
+    handleSessionTeamRequest(c),
   );
 
   app.put("/api/projects/:encodedProjectName/histories/:sessionId/star", (c) =>

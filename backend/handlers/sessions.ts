@@ -9,6 +9,7 @@ import { logger } from "../utils/logger.ts";
 import { readDir } from "../utils/fs.ts";
 import { getHomeDir } from "../utils/os.ts";
 import { setSessionStarred } from "../history/starred.ts";
+import { readTeamForSession } from "../history/teams.ts";
 
 /**
  * Longest accepted title. Generous — the point is to stop a runaway paste
@@ -213,4 +214,28 @@ export async function handleStarConversationRequest(c: Context) {
   }
 
   return c.json({ sessionId: params.sessionId, isStarred });
+}
+
+/**
+ * Handles `GET /api/projects/:encodedProjectName/histories/:sessionId/team`.
+ *
+ * Returns `{ team: null }` rather than a 404 when the session has no team:
+ * having none is the normal case, and the panel asks for every conversation.
+ */
+export async function handleSessionTeamRequest(c: Context) {
+  const params = readParams(c);
+  if (!params) {
+    return c.json({ error: "Invalid project name or session id" }, 400);
+  }
+
+  try {
+    const team = await readTeamForSession(params.sessionId);
+    return c.json({ team });
+  } catch (error) {
+    logger.history.error("Failed to read team for {sessionId}: {error}", {
+      sessionId: params.sessionId,
+      error,
+    });
+    return c.json({ error: "Failed to read team" }, 500);
+  }
 }

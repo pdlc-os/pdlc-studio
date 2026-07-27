@@ -1579,3 +1579,24 @@ body,
     animation: none;
   }
 }
+
+/* The teammate's charter: long, so it starts closed and is scrollable open. */
+.agent-member-prompt {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.agent-member-prompt > summary {
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+
+.agent-member-prompt > p {
+  margin: var(--spacing-1) 0 0;
+  max-block-size: 14rem;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  padding: var(--spacing-2);
+  border-radius: var(--radius-inner);
+  background-color: var(--color-background-surface);
+}

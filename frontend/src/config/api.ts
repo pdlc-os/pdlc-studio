@@ -88,6 +88,11 @@ export const getSessionUrl = (
 ): string =>
   `${API_CONFIG.ENDPOINTS.HISTORIES}/${encodedProjectName}/histories/${encodeURIComponent(sessionId)}`;
 
+export const getSessionTeamUrl = (
+  encodedProjectName: string,
+  sessionId: string,
+): string => `${getSessionUrl(encodedProjectName, sessionId)}/team`;
+
 export const getSessionStarUrl = (
   encodedProjectName: string,
   sessionId: string,

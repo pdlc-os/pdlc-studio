@@ -30,6 +30,7 @@ import { useAbortController } from "../hooks/chat/useAbortController";
 import { useAutoHistoryLoader } from "../hooks/useHistoryLoader";
 import { useSettings } from "../hooks/useSettings";
 import { useConversationList } from "../hooks/useConversationList";
+import { useSessionTeam } from "../hooks/useSessionTeam";
 import { useAttachments, withAttachments } from "../hooks/useAttachments";
 import { ConversationSidebar } from "./chat/ConversationSidebar";
 import { RenameConversationDialog } from "./chat/RenameConversationDialog";
@@ -207,6 +208,9 @@ export function ChatPage() {
    * name. Preferring the live id keeps the two in agreement.
    */
   const activeSessionKey = currentSessionId ?? sessionId ?? null;
+
+  // The agent team behind this conversation, if it spawned one.
+  const sessionTeam = useSessionTeam(getEncodedName(), activeSessionKey);
 
   const {
     allowedTools,
@@ -925,6 +929,8 @@ export function ChatPage() {
                     <AgentsPanel
                       activity={agentActivity}
                       workingDirectory={workingDirectory}
+                      team={sessionTeam}
+                      onOpenSession={handleSelectConversation}
                     />
                   </div>
                 ) : activeTab === "files" ? (
