@@ -134,9 +134,8 @@ cd frontend && npm run dev
 ### Prerequisites
 
 - ✅ **Claude CLI** installed and authenticated ([Get it here](https://github.com/anthropics/claude-code))
-- ✅ **Node.js >=20.0.0** (for npm installation) or **Deno** (for development)
+- ✅ **Node.js >=22.9.0** (for npm installation) or **Deno** (for development)
 - ✅ **Modern browser** (Chrome, Firefox, Safari, Edge)
-- ✅ **dotenvx** (for development): [Install guide](https://dotenvx.com/docs/install)
 
 ---
 
@@ -231,7 +230,6 @@ pdlc-studio --debug
 git clone https://github.com/pdlc-os/pdlc-studio.git
 cd pdlc-studio
 
-# Install dotenvx (see prerequisites)
 
 # Start backend (choose one)
 cd backend
@@ -252,13 +250,13 @@ Create `.env` file in project root:
 echo "PORT=9000" > .env
 ```
 
-Run with dotenvx to use the `.env` file:
+Both dev tasks load the root `.env` themselves:
 
 ```bash
 # Backend
 cd backend
-dotenvx run --env-file=../.env -- deno task dev    # Deno
-dotenvx run --env-file=../.env -- npm run dev      # Node.js
+deno task dev    # Deno
+npm run dev      # Node.js
 
 # Frontend (uses Vite's built-in .env support)
 cd frontend

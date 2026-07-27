@@ -34,11 +34,11 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.9.0"
   },
   "scripts": {
     "predev": "node scripts/generate-version.js",
-    "dev": "tsx watch cli/node.ts --debug",
+    "dev": "tsx watch --env-file-if-exists=../.env cli/node.ts --debug",
     "prebuild": "node scripts/generate-version.js",
     "build": "npm run build:clean && npm run build:bundle && npm run build:static",
     "build:clean": "rimraf dist",

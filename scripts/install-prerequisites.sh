@@ -6,10 +6,9 @@
 #
 # Installs:
 #   - Claude CLI      required by every install method
-#   - dotenvx         optional, only for loading .env in development
 #
 # Verifies but does NOT install:
-#   - Node.js >= 20 and Deno, needed only for development mode
+#   - Node.js >= 22.9 and Deno, needed only for development mode
 #
 # Runtimes are checked rather than installed on purpose. Most developers manage
 # Node through nvm, asdf, volta or similar, and having this script drop another
@@ -21,7 +20,8 @@
 
 set -euo pipefail
 
-readonly REQUIRED_NODE_MAJOR=20
+readonly REQUIRED_NODE_MAJOR=22
+readonly REQUIRED_NODE_MINOR=9
 
 # Only colourise when attached to a terminal, so piped output stays clean.
 if [ -t 1 ]; then
@@ -78,33 +78,21 @@ fi
 
 info "run 'claude' once to authenticate if you have not already"
 
-# -------------------------------------------------------------------- dotenvx
-
-step "dotenvx (optional — only for .env in development)"
-if have dotenvx; then
-  ok "already installed — $(dotenvx --version 2>/dev/null | head -1)"
-elif [ "$OS" = macos ] && have brew; then
-  info "installing via Homebrew tap dotenvx/brew"
-  brew install dotenvx/brew/dotenvx
-  ok "installed"
-else
-  # dotenvx is not in homebrew-core, and there is no brew on most Linux boxes,
-  # so fall back to the vendor's install script.
-  info "installing from https://dotenvx.sh/install.sh"
-  curl -sfS https://dotenvx.sh/install.sh | sh
-  if have dotenvx; then ok "installed"; else warn "install finished but 'dotenvx' is not on PATH"; fi
-fi
-
 # ------------------------------------------------------- runtimes (dev only)
 
 step "Development runtimes (skip if you only run the release binary)"
 
 if have node; then
+  # Compared as major.minor, not major alone: the floor is 22.9, the release
+  # that added --env-file-if-exists, so a v22.5 would pass a major-only check
+  # and then fail the moment `npm run dev` loads .env.
   node_major=$(node -v | sed -E 's/^v([0-9]+).*/\1/')
-  if [ "$node_major" -ge "$REQUIRED_NODE_MAJOR" ]; then
+  node_minor=$(node -v | sed -E 's/^v[0-9]+\.([0-9]+).*/\1/')
+  if [ "$node_major" -gt "$REQUIRED_NODE_MAJOR" ] ||
+    { [ "$node_major" -eq "$REQUIRED_NODE_MAJOR" ] && [ "$node_minor" -ge "$REQUIRED_NODE_MINOR" ]; }; then
     ok "Node.js $(node -v)"
   else
-    warn "Node.js $(node -v) is older than the required v${REQUIRED_NODE_MAJOR}"
+    warn "Node.js $(node -v) is older than the required v${REQUIRED_NODE_MAJOR}.${REQUIRED_NODE_MINOR}"
     if [ "$OS" = macos ]; then info "upgrade with: brew install node"; else info "see https://nodejs.org/en/download"; fi
   fi
 else

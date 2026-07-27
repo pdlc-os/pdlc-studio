@@ -266,10 +266,14 @@ Playwright MCP server integration for automated browser testing and demo verific
 
 ### Prerequisites
 
-- Backend: Deno or Node.js (20.0.0+)
+- Backend: Deno or Node.js (22.9.0+)
 - Frontend: Node.js
 - Claude CLI tool installed
-- dotenvx: `npm install -g @dotenvx/dotenvx`
+
+The Node floor is 22.9 because the dev task loads `.env` with
+`--env-file-if-exists`, which has no Node 20 backport. Plain `--env-file`
+exists from 20.6 but *errors* when the file is missing, and `.env` is
+gitignored and absent by default.
 
 ### Port Configuration
 
@@ -278,6 +282,16 @@ Create `.env` file in project root:
 ```bash
 PORT=9000
 ```
+
+Both dev tasks pick it up on their own — Vite reads it for the frontend, and
+the backend passes it to the runtime (`--env-file-if-exists` for Node,
+`--env-file` for Deno, which warns rather than failing when it is absent).
+
+**The compiled binary does not.** It reads the environment it is handed, and
+rejects `--env-file` outright, since argv goes to commander rather than to the
+runtime. Use `PORT=9000 pdlc-studio`, the `--port` flag, or
+`set -a; . ./.env; set +a` before launching. This is why no `.env` loader is a
+dependency of this project.
 
 ### Running the Application
 

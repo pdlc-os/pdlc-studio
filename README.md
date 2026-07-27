@@ -70,9 +70,8 @@ The Claude Code CLI is excellent at what it does, but a terminal constrains how 
 | ------------------------- | :------------: | :--------------: |
 | Claude CLI, authenticated |    Required    |     Required     |
 | Modern browser            |    Required    |     Required     |
-| Node.js >= 20             |       —        |     Required     |
+| Node.js >= 22.9           |       —        |     Required     |
 | Deno                      |       —        |     Optional     |
-| dotenvx                   |       —        |     Optional     |
 
 The release binary is self-contained: it bundles the runtime and the web assets, so the Claude CLI and a browser are all you need.
 
@@ -82,7 +81,7 @@ Install the prerequisites with one command:
 curl -fsSL https://raw.githubusercontent.com/pdlc-os/pdlc-studio/main/scripts/install-prerequisites.sh | bash
 ```
 
-The script installs the Claude CLI if it is missing and dotenvx if you want `.env` support. It **checks** for Node.js and Deno and prints the exact install command rather than installing them, because most developers manage those through a version manager (nvm, asdf, volta, fnm) and a second copy on `PATH` is a common source of the path-detection problems in [Troubleshooting](#troubleshooting). The script is safe to re-run; anything already present is left alone.
+The script installs the Claude CLI if it is missing. It **checks** for Node.js and Deno and prints the exact install command rather than installing them, because most developers manage those through a version manager (nvm, asdf, volta, fnm) and a second copy on `PATH` is a common source of the path-detection problems in [Troubleshooting](#troubleshooting). The script is safe to re-run; anything already present is left alone.
 
 > [!NOTE]
 > Run `claude` once after installing to authenticate. PDLC Studio uses your existing CLI login and never handles credentials itself.
@@ -201,11 +200,16 @@ PORT=9000 DEBUG=true pdlc-studio
 
 # From a .env file in the project root
 echo "PORT=9000" > .env
-dotenvx run --env-file=.env -- pdlc-studio
+set -a; . ./.env; set +a; pdlc-studio
 ```
 
 > [!NOTE]
-> dotenvx is optional and used only to load a `.env` file into the process. Nothing in the application depends on it — exporting `PORT` directly works identically. The frontend dev server reads the root `.env` on its own through Vite.
+> The binary reads the environment it is given; it does not load `.env` itself,
+> and `--env-file` is a runtime flag the compiled binary does not accept. The
+> `set -a` line above is the shell's own way of exporting every assignment in a
+> file, so no extra tool is needed. Both dev servers do load the root `.env`
+> automatically — Vite reads it directly, and the backend dev tasks pass it to
+> Node and Deno through their built-in `--env-file` flags.
 
 ---
 
@@ -365,7 +369,7 @@ Download the latest binary from [Releases](https://github.com/pdlc-os/pdlc-studi
 <details>
 <summary><strong>Deno or Node.js for the backend?</strong></summary>
 
-Either. `make dev-backend` uses Deno and needs no dependency install; `cd backend && npm run dev` uses Node.js >= 20. Release binaries are compiled with Deno.
+Either. `make dev-backend` uses Deno and needs no dependency install; `cd backend && npm run dev` uses Node.js >= 22.9. Release binaries are compiled with Deno.
 
 </details>
 
