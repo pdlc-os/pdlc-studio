@@ -13,3 +13,5 @@ frontend/playwright-report/
 # Playwright MCP scratch output (see the MCP Integration section in CLAUDE.md)
 .playwright-mcp/
 frontend/playwright/.cache/
+# macOS Finder metadata
+.DS_Store
