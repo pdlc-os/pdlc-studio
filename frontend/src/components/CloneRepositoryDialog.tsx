@@ -93,6 +93,7 @@ export function CloneRepositoryDialog({
               label="Close"
               variant="ghost"
               icon={<Icon icon="close" />}
+              tooltip="Close"
             />
           </HStack>
 

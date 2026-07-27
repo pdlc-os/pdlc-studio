@@ -140,10 +140,22 @@ describe("DirectoryPickerDialog", () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Go to parent directory" }),
-      ).toBeDisabled();
+    /*
+     * A button carrying a tooltip reports aria-disabled rather than the
+     * disabled attribute, so it can still receive the hover that shows the
+     * tooltip. Assert it is genuinely inert as well as marked.
+     */
+    const parentButton = await waitFor(() => {
+      const button = screen.getByRole("button", {
+        name: "Go to parent directory",
+      });
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      return button;
     });
+
+    const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+    const callsBefore = fetchMock.mock.calls.length;
+    fireEvent.click(parentButton);
+    expect(fetchMock.mock.calls.length).toBe(callsBefore);
   });
 });

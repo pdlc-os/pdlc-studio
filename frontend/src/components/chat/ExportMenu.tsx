@@ -28,6 +28,7 @@ export function ExportMenu({ onExport, isDisabled = false }: ExportMenuProps) {
         // visible text — the download glyph is conventional enough to carry
         // this on its own, and the menu names every format it can produce.
         label: "Export transcript",
+        tooltip: "Export transcript",
         isIconOnly: true,
         isDisabled,
       }}

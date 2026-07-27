@@ -755,6 +755,7 @@ export function ChatPage() {
               className="app-mark-button"
               onClick={handleBackToProjects}
               aria-label="PDLC Studio home"
+              title="PDLC Studio home"
             >
               <AppIcon size={40} variant="mark" />
             </button>
@@ -922,6 +923,11 @@ export function ChatPage() {
                               data-testid="header-star"
                               aria-pressed={
                                 activeConversation.isStarred === true
+                              }
+                              tooltip={
+                                activeConversation.isStarred
+                                  ? "Remove star"
+                                  : "Star conversation"
                               }
                               icon={
                                 <Icon

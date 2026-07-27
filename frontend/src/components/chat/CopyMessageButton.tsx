@@ -69,6 +69,9 @@ export function CopyMessageButton({ text, label }: CopyMessageButtonProps) {
       data-state={state}
       // The visible glyph carries no name, so the label is the accessible one.
       label={label ? `${description} ${label}` : description}
+      // Mirrors the accessible name, so the hover hint and the announcement
+      // cannot drift, and it follows the copied/failed state.
+      tooltip={label ? `${description} ${label}` : description}
       icon={<Icon icon={state === "copied" ? Check : Copy} size="sm" />}
       onClick={() => void copy()}
     />

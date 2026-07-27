@@ -744,6 +744,7 @@ export function ChatInput({
                 isDisabled={isLoading || isUploadingAttachments}
                 data-testid="attach-files"
                 icon={<Icon icon={Paperclip} />}
+                tooltip="Attach files"
               />
             ) : null}
           </>
