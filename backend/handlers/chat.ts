@@ -3,6 +3,8 @@ import {
   AbortError,
   query,
   type PermissionMode,
+  type Query,
+  type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type {
   ChatRequest,
@@ -15,6 +17,41 @@ import {
   resolvePermissionMode,
   VALID_PERMISSION_MODES,
 } from "../utils/permissions.ts";
+
+/**
+ * Turns currently in flight, so control requests can reach them.
+ *
+ * Keyed by requestId, the same key the abort map uses. An entry exists only
+ * while the turn is running: it is removed in the `finally` below, so a
+ * control request naming a finished turn gets a clean 404 rather than acting
+ * on a dead session.
+ *
+ * Module-level rather than threaded through the handler because control
+ * requests arrive on their own HTTP requests, with nothing else in common.
+ */
+const activeSessions = new Map<string, Query>();
+
+/** The live turn for a request, if there is one. */
+export function getActiveSession(requestId: string): Query | undefined {
+  return activeSessions.get(requestId);
+}
+
+/**
+ * Requests the user deliberately stopped with interrupt().
+ *
+ * A successful interrupt does not end the query quietly: the SDK raises
+ * "Claude Code returned an error result: [ede_diagnostic] result_type=user",
+ * which is indistinguishable from a genuine failure at the catch site. Without
+ * this the user presses Stop and the transcript shows an error, which is worse
+ * than the kill path it replaced.
+ *
+ * Set by the abort handler, read once by the turn, cleared in its `finally`.
+ */
+const interruptedRequests = new Set<string>();
+
+export function markInterrupted(requestId: string): void {
+  interruptedRequests.add(requestId);
+}
 
 /**
  * Executes a Claude command and yields streaming responses
@@ -42,6 +79,8 @@ async function* executeClaudeCommand(
   thinking?: ThinkingMode,
 ): AsyncGenerator<StreamResponse> {
   let abortController: AbortController;
+  /** Releases the parked input stream; see userInput below. */
+  let closeInput: () => void = () => {};
 
   try {
     /*
@@ -60,8 +99,47 @@ async function* executeClaudeCommand(
     abortController = new AbortController();
     requestAbortControllers.set(requestId, abortController);
 
-    for await (const sdkMessage of query({
-      prompt: processedMessage,
+    // Held open for the life of the turn; see userInput below.
+    const inputClosed = new Promise<void>((resolve) => {
+      closeInput = resolve;
+    });
+
+    /*
+     * Streaming input, not a plain string.
+     *
+     * The SDK's control requests — interrupt(), setModel(),
+     * setPermissionMode() — are documented as "only supported when streaming
+     * input/output is used", and a string prompt is not. With a string the
+     * only way to stop a turn was to kill the process through the
+     * AbortController, which loses the turn instead of ending it.
+     *
+     * The generator yields the message and then *parks* rather than returning.
+     * Returning ends the input stream, and the CLI treats end-of-input as the
+     * end of the session — which closes the control channel with it. Measured:
+     * with an exhausted stream, interrupt() never resolves and times out.
+     * `commands.ts` parks for the same reason, so that
+     * `initializationResult()` — also a control request — can be answered.
+     *
+     * The park is released when the turn's `result` arrives, and
+     * unconditionally in the `finally`, so the query can never be left waiting
+     * on input that is not coming.
+     *
+     * `origin` must be stamped explicitly. The SDK treats an absent origin as
+     * unattributed and fails closed at strict isHuman() trust gates, and this
+     * really is keyboard input the user typed.
+     */
+    async function* userInput(): AsyncGenerator<SDKUserMessage> {
+      yield {
+        type: "user",
+        message: { role: "user", content: processedMessage },
+        parent_tool_use_id: null,
+        origin: { kind: "human" },
+      };
+      await inputClosed;
+    }
+
+    const session = query({
+      prompt: userInput(),
       options: {
         abortController,
         executable: "node" as const,
@@ -100,7 +178,13 @@ async function* executeClaudeCommand(
             }
           : {}),
       },
-    })) {
+    });
+
+    // Held so control requests can reach this turn while it runs; dropped in
+    // the finally below, so a finished turn is never addressable.
+    activeSessions.set(requestId, session);
+
+    for await (const sdkMessage of session) {
       // Debug logging of raw SDK messages with detailed content
       logger.chat.debug("Claude SDK Message: {sdkMessage}", { sdkMessage });
 
@@ -108,13 +192,24 @@ async function* executeClaudeCommand(
         type: "claude_json",
         data: sdkMessage,
       };
+
+      /*
+       * The turn is over, so stop holding the input stream open. Without this
+       * the CLI waits for more input and the query — and the HTTP response
+       * with it — never ends.
+       */
+      if (sdkMessage.type === "result") {
+        closeInput();
+      }
     }
 
     yield { type: "done" };
   } catch (error) {
     // The Agent SDK exports AbortError as a real runtime value, so an aborted
     // request can finally be reported as such instead of as a failure.
-    if (error instanceof AbortError) {
+    if (error instanceof AbortError || interruptedRequests.has(requestId)) {
+      // An interrupt the user asked for is a stop, not a failure — see
+      // interruptedRequests above for why it arrives as an error at all.
       yield { type: "aborted" };
     } else {
       logger.chat.error("Claude Code execution failed: {error}", { error });
@@ -124,10 +219,18 @@ async function* executeClaudeCommand(
       };
     }
   } finally {
+    // Belt and braces: an error before the result message would otherwise
+    // leave the generator parked forever.
+    closeInput();
+    interruptedRequests.delete(requestId);
+
     // Clean up AbortController from map
     if (requestAbortControllers.has(requestId)) {
       requestAbortControllers.delete(requestId);
     }
+    // Must happen on every exit path — a leaked entry would let a later
+    // control request act on a session that has already finished.
+    activeSessions.delete(requestId);
   }
 }
 
