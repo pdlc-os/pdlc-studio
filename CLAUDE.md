@@ -946,6 +946,32 @@ rather than putting an error in the transcript — which would be worse than the
 kill path it replaced. The mark is set _before_ awaiting the interrupt, since
 the turn can raise that error the moment it lands.
 
+### Newline chords and list continuation
+
+Alt/Opt, Ctrl or Cmd with Enter always inserts a newline, whichever way
+`enterBehavior` is set — no mode binds those, so there is nothing to override.
+
+**Shift is deliberately not in that set.** Under `enterBehavior: "newline"`
+Shift+Enter is the user's configured _send_, and quietly reassigning a setting
+is worse than offering one chord fewer. In the default "send" mode Shift+Enter
+already inserts a newline, so nothing is missing there.
+
+Every newline-producing path routes through `insertNewline`
+(`utils/listContinuation.ts`), so a line break carries the list marker: `- foo`
+opens the next line with `- `, `1. foo` with `2. `, indentation is preserved,
+and the marker the user typed is echoed rather than normalised (`*` stays `*`,
+`1)` stays `1)`). A newline on an _empty_ item removes the marker instead,
+which is how every markdown editor ends a list — without it there is no way to
+stop without deleting the marker by hand.
+
+There is no rich text here. The buffer stays plain markdown, which is what
+reaches Claude; "turning into a list" only ever means the next marker is
+inserted for you.
+
+The caret goes through the same `pendingCaret` layout effect the `@` picker
+uses. A `requestAnimationFrame` can run before React commits the new value, in
+which case the caret lands on the old text and is then reset.
+
 ## Conversation Typography
 
 The message transcript has its own typeface and text scale, chosen in Settings →
