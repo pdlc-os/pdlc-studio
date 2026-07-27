@@ -379,6 +379,17 @@ body,
   color: transparent;
 }
 
+/*
+ * A mention names a file, not a command, so it stays on the ordinary text
+ * colour. The brand sweep is what marks something the CLI will execute, and
+ * spending it here would make the two menus look interchangeable.
+ */
+.mention-menu-name {
+  font-family: var(--font-family-code);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
 .slash-menu-char-match {
   font-weight: 800;
 }

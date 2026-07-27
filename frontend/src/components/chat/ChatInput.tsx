@@ -1,4 +1,11 @@
-import React, { useRef, useEffect, useState, useMemo, useId } from "react";
+import React, {
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useMemo,
+  useId,
+} from "react";
 import { ChatComposer } from "@astryxdesign/core/Chat";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { Button } from "@astryxdesign/core/Button";
@@ -16,9 +23,16 @@ import {
   slashOptionId,
 } from "../../utils/slashCommands";
 import type { CommandMatch } from "../../utils/slashCommands";
+import {
+  applyMention,
+  filterAttachments,
+  getMentionQuery,
+  mentionText,
+} from "../../utils/fileMentions";
 import { PermissionInputPanel } from "./PermissionInputPanel";
 import { PlanPermissionInputPanel } from "./PlanPermissionInputPanel";
 import { SlashCommandMenu } from "./SlashCommandMenu";
+import { FileMentionMenu } from "./FileMentionMenu";
 import { ComposerHighlight } from "./ComposerHighlight";
 import { AttachmentTray } from "./AttachmentTray";
 import { ModelSelector } from "./ModelSelector";
@@ -158,6 +172,17 @@ export function ChatInput({
   // than requiring the user to clear the line.
   const [dismissedQuery, setDismissedQuery] = useState<string | null>(null);
 
+  /*
+   * The caret position, tracked because a mention is found by looking
+   * backwards from it. `input` alone cannot say where the caret is, and the
+   * token being completed is the one the caret sits in — not the last `@` in
+   * the line.
+   */
+  const [caret, setCaret] = useState(0);
+  /** Caret a completion has asked for, applied once the value is committed. */
+  const pendingCaret = useRef<number | null>(null);
+  const [dismissedMention, setDismissedMention] = useState<string | null>(null);
+
   useAutoResizeTextarea(inputRef, input);
 
   const slashQuery = getSlashQuery(input);
@@ -174,11 +199,42 @@ export function ChatInput({
     !isLoading &&
     !showPermissions;
 
+  /*
+   * `@` completes attachments, so it is only offered when there are any. With
+   * nothing attached the key is just a character, which is what it has to stay
+   * for anyone typing an email address.
+   */
+  const mentionToken = useMemo(
+    () => (attachments.length === 0 ? null : getMentionQuery(input, caret)),
+    [attachments.length, input, caret],
+  );
+
+  const mentionMatches = useMemo(
+    () =>
+      mentionToken === null
+        ? []
+        : filterAttachments(attachments, mentionToken.query),
+    [attachments, mentionToken],
+  );
+
+  const isMentionMenuOpen =
+    mentionToken !== null &&
+    mentionToken.query !== dismissedMention &&
+    mentionMatches.length > 0 &&
+    !isComposing &&
+    !isLoading &&
+    !showPermissions;
+
+  // Both menus share one listbox id and one selection index, so they must
+  // never be open together. The slash picker wins: it requires the input to be
+  // a single leading /token, which cannot also contain a mention.
+  const isAnyMenuOpen = isMenuOpen || isMentionMenuOpen;
+
   // Ranking changes as the query narrows, so an index held over from the
   // previous keystroke could point at an unrelated command.
   useEffect(() => {
     setSelectedIndex(0);
-  }, [slashQuery]);
+  }, [slashQuery, mentionToken?.query]);
 
   // Focus input when not loading and not in permission mode
   useEffect(() => {
@@ -190,8 +246,37 @@ export function ChatInput({
   const handleInputChange = (value: string) => {
     // Any edit is a fresh intent to see the menu again.
     setDismissedQuery(null);
+    setDismissedMention(null);
+    // Astryx's TextArea reports the value, not the event, so the caret is read
+    // from the element. It has already been updated by the time this runs.
+    setCaret(inputRef.current?.selectionStart ?? value.length);
     onInputChange(value);
   };
+
+  /*
+   * Moving the caret with the arrows or the mouse changes which token is being
+   * completed without changing the text, so those need tracking too.
+   */
+  const syncCaret = () => {
+    setCaret(inputRef.current?.selectionStart ?? 0);
+  };
+
+  /**
+   * Applies a caret position requested by a completion, once the value it
+   * belongs to is actually in the DOM.
+   */
+  useLayoutEffect(() => {
+    const target = pendingCaret.current;
+    if (target === null) return;
+    pendingCaret.current = null;
+
+    const element = inputRef.current;
+    if (!element) return;
+
+    element.focus();
+    element.setSelectionRange(target, target);
+    setCaret(target);
+  }, [input]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
@@ -240,6 +325,62 @@ export function ChatInput({
     inputRef.current?.focus();
   };
 
+  const applyMentionSelection = (attachment: AttachmentInfo) => {
+    if (!mentionToken) return;
+
+    const { value, caret: nextCaret } = applyMention(
+      input,
+      mentionToken,
+      mentionText(attachment, attachments),
+    );
+
+    /*
+     * The caret is placed by the layout effect below rather than here.
+     *
+     * It has to land after React has written the new value: a
+     * requestAnimationFrame can run before the commit, in which case the
+     * selection is applied to the old text and then reset when the value
+     * changes — which fires a `select` carrying the stale offset and leaves
+     * the picker open over a token that no longer exists.
+     */
+    pendingCaret.current = nextCaret;
+    setDismissedMention(null);
+    onInputChange(value);
+  };
+
+  const handleMentionKeyDown = (
+    e: React.KeyboardEvent<HTMLTextAreaElement>,
+  ): boolean => {
+    if (!isMentionMenuOpen) return false;
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        setSelectedIndex((current) => (current + 1) % mentionMatches.length);
+        return true;
+      case "ArrowUp":
+        e.preventDefault();
+        setSelectedIndex(
+          (current) =>
+            (current - 1 + mentionMatches.length) % mentionMatches.length,
+        );
+        return true;
+      case "Tab":
+      case KEYBOARD_SHORTCUTS.SUBMIT:
+        e.preventDefault();
+        applyMentionSelection(mentionMatches[selectedIndex]);
+        return true;
+      case KEYBOARD_SHORTCUTS.ABORT:
+        // Close the menu without letting Escape reach the abort handler.
+        e.preventDefault();
+        e.stopPropagation();
+        setDismissedMention(mentionToken?.query ?? null);
+        return true;
+      default:
+        return false;
+    }
+  };
+
   const handleMenuKeyDown = (
     e: React.KeyboardEvent<HTMLTextAreaElement>,
   ): boolean => {
@@ -275,8 +416,14 @@ export function ChatInput({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (handleMenuKeyDown(e)) {
+    if (handleMenuKeyDown(e) || handleMentionKeyDown(e)) {
       return;
+    }
+
+    // Arrow keys and Home/End move the caret without editing, which changes
+    // which token is being completed.
+    if (e.key.startsWith("Arrow") || e.key === "Home" || e.key === "End") {
+      requestAnimationFrame(syncCaret);
     }
 
     // Permission mode toggle: Ctrl+Shift+M (all platforms)
@@ -400,6 +547,15 @@ export function ChatInput({
           Drop files to attach
         </div>
       ) : null}
+      {isMentionMenuOpen ? (
+        <FileMentionMenu
+          matches={mentionMatches}
+          selectedIndex={selectedIndex}
+          onSelect={applyMentionSelection}
+          onHoverIndex={setSelectedIndex}
+          listboxId={listboxId}
+        />
+      ) : null}
       {isMenuOpen ? (
         <SlashCommandMenu
           matches={matches}
@@ -444,11 +600,15 @@ export function ChatInput({
               // Expose the picker as a combobox so screen readers announce the
               // highlighted command as the user arrows through it.
               role="combobox"
-              aria-expanded={isMenuOpen}
-              aria-controls={isMenuOpen ? listboxId : undefined}
+              aria-expanded={isAnyMenuOpen}
+              aria-controls={isAnyMenuOpen ? listboxId : undefined}
               aria-activedescendant={
-                isMenuOpen ? slashOptionId(listboxId, selectedIndex) : undefined
+                isAnyMenuOpen
+                  ? slashOptionId(listboxId, selectedIndex)
+                  : undefined
               }
+              onClick={syncCaret}
+              onSelect={syncCaret}
               aria-autocomplete="list"
             />
             <ComposerHighlight

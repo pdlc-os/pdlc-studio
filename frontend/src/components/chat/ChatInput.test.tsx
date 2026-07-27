@@ -437,3 +437,122 @@ describe("context island placement", () => {
     expect(screen.getByTestId("context-island")).toHaveTextContent("42%");
   });
 });
+
+/**
+ * The `@` picker completes attachments. Its unit-level rules live in
+ * fileMentions.test.ts; these cover the wiring — that the menu appears over
+ * the composer and that committing one edits the text.
+ */
+describe("file mention picker", () => {
+  const ATTACHMENTS = [
+    { path: "/tmp/up/notes.md", name: "notes.md", size: 12 },
+    { path: "/tmp/up/report.pdf", name: "report.pdf", size: 34 },
+  ];
+
+  function MentionHarness({
+    attachments = ATTACHMENTS,
+    onSubmit = vi.fn(),
+  }: {
+    attachments?: typeof ATTACHMENTS;
+    onSubmit?: () => void;
+  }) {
+    const [input, setInput] = useState("");
+    return (
+      <MemoryRouter>
+        <SettingsProvider>
+          <AstryxProvider>
+            <SlashCommandsProvider workingDirectory="/tmp/project">
+              <ChatInput
+                input={input}
+                isLoading={false}
+                currentRequestId={null}
+                onInputChange={setInput}
+                onSubmit={onSubmit}
+                onAbort={vi.fn()}
+                permissionMode="default"
+                onPermissionModeChange={vi.fn()}
+                attachments={attachments}
+              />
+            </SlashCommandsProvider>
+          </AstryxProvider>
+        </SettingsProvider>
+      </MemoryRouter>
+    );
+  }
+
+  async function renderMentions(attachments = ATTACHMENTS) {
+    render(<MentionHarness attachments={attachments} />);
+    await act(async () => {});
+    return screen.getByRole("combobox", { name: "Message" });
+  }
+
+  /** Types into the textarea with the caret at the end. */
+  function type(textarea: HTMLElement, value: string) {
+    fireEvent.change(textarea, { target: { value } });
+  }
+
+  const mentionOptions = () =>
+    screen
+      .queryAllByRole("option")
+      .filter((option) => option.closest('[aria-label="Attached files"]'));
+
+  it("offers the attachments on a bare @", async () => {
+    const textarea = await renderMentions();
+
+    type(textarea, "look at @");
+
+    expect(mentionOptions().map((o) => o.textContent)).toEqual([
+      expect.stringContaining("notes.md"),
+      expect.stringContaining("report.pdf"),
+    ]);
+  });
+
+  it("narrows as the name is typed", async () => {
+    const textarea = await renderMentions();
+
+    type(textarea, "look at @rep");
+
+    expect(mentionOptions()).toHaveLength(1);
+    expect(mentionOptions()[0].textContent).toContain("report.pdf");
+  });
+
+  it("stays shut when nothing is attached", async () => {
+    // With no attachments the key is just a character, which is what it has
+    // to stay for anyone typing an email address.
+    const textarea = await renderMentions([]);
+
+    type(textarea, "look at @");
+
+    expect(mentionOptions()).toHaveLength(0);
+  });
+
+  it("inserts the filename on Enter", async () => {
+    const textarea = await renderMentions();
+
+    type(textarea, "read @rep");
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    await waitFor(() => {
+      expect((textarea as HTMLTextAreaElement).value).toBe("read @report.pdf ");
+    });
+    // The trailing space ends the token, so the menu closes with it.
+    expect(mentionOptions()).toHaveLength(0);
+  });
+
+  it("does not send the message while the picker is open", async () => {
+    const onSubmit = vi.fn();
+    render(<MentionHarness onSubmit={onSubmit} />);
+    await act(async () => {});
+
+    const textarea = screen.getByRole("combobox", { name: "Message" });
+    type(textarea, "read @rep");
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    // Enter commits the highlighted attachment instead, matching the slash
+    // picker and every other completion menu.
+    expect(onSubmit).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect((textarea as HTMLTextAreaElement).value).toBe("read @report.pdf ");
+    });
+  });
+});
