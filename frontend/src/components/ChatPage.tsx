@@ -212,6 +212,14 @@ export function ChatPage() {
   // The agent team behind this conversation, if it spawned one.
   const sessionTeam = useSessionTeam(getEncodedName(), activeSessionKey);
 
+  /*
+   * Agents still working. Drives two indicators that must agree: the island's
+   * count and the dot on the Agents tab. Deriving both from one value is what
+   * stops them disagreeing — a dot left on after the island has gone quiet
+   * would say work is in flight when none is.
+   */
+  const runningAgentCount = runningTasks(agentActivity).length;
+
   const {
     allowedTools,
     permissionRequest,
@@ -895,6 +903,22 @@ export function ChatPage() {
                             <SegmentedControlItem
                               value="agents"
                               label="Agents"
+                              /*
+                               * `label` is a string, so the dot rides in on
+                               * `icon` — the only ReactNode slot the segment
+                               * offers. It marks the tab as having something
+                               * live to show, and disappears with the last
+                               * running agent.
+                               */
+                              icon={
+                                runningAgentCount > 0 ? (
+                                  <span
+                                    className="tab-activity-dot"
+                                    data-testid="agents-tab-dot"
+                                    aria-hidden="true"
+                                  />
+                                ) : undefined
+                              }
                             />
                           </SegmentedControl>
                           {/* Nothing to write out until the conversation has content. */}
@@ -963,7 +987,7 @@ export function ChatPage() {
                         onRemoveAttachment={removeAttachment}
                         contextUsage={contextUsage}
                         cliStatus={cliStatus}
-                        runningAgents={runningTasks(agentActivity).length}
+                        runningAgents={runningAgentCount}
                         onShowAgents={() => handleTabChange("agents")}
                       />
                     }

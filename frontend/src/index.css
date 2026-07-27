@@ -1600,3 +1600,71 @@ body,
   border-radius: var(--radius-inner);
   background-color: var(--color-background-surface);
 }
+
+/*
+ * Activity dot on the Agents tab.
+ *
+ * Says the tab has something live behind it. Deliberately the same blue and
+ * the same pulse as the island's, because they report the same fact from one
+ * value — two indicators for one state should not look like two states.
+ *
+ * aria-hidden: the island already announces the count through a live region,
+ * and a second announcement of the same thing is noise.
+ */
+.tab-activity-dot {
+  position: relative;
+  display: inline-block;
+  inline-size: 0.4375rem;
+  block-size: 0.4375rem;
+  border-radius: var(--radius-full);
+  background-color: var(--color-text-blue);
+  /*
+   * Room for the halo to expand into.
+   *
+   * The ring reaches HALO_SCALE/2 of the dot's width past each edge, and the
+   * segment's own icon gap is not enough on its own — without this the pulse
+   * washes over the "A" of "Agents" at the top of every cycle.
+   */
+  margin-inline-end: 0.375rem;
+}
+
+/*
+ * The pulse is a halo expanding out of the dot, not the dot itself fading.
+ *
+ * A fading dot reads as "dimming"; a ring radiating from a solid centre reads
+ * as "live" — and it keeps the dot at full contrast throughout, so the
+ * indicator never becomes hard to see at the bottom of its cycle.
+ *
+ * On a pseudo-element so the animation cannot affect layout: the dot sits
+ * inside a segmented-control button, and animating its own size would nudge
+ * the label beside it on every cycle.
+ */
+.tab-activity-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-color: var(--color-text-blue);
+  animation: tab-activity-pulse 1.8s ease-out infinite;
+}
+
+@keyframes tab-activity-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  70% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-activity-dot::after {
+    animation: none;
+  }
+}
