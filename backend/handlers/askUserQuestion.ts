@@ -28,6 +28,15 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { logger } from "../utils/logger.ts";
 
+/**
+ * The name Claude sees, namespaced by the MCP server it is mounted on.
+ *
+ * Exported because it has to be auto-allowed by name: bypassPermissions does
+ * not cover MCP tools, so without this a user in YOLO mode is prompted for
+ * permission before Claude may ask them a question.
+ */
+export const ASK_USER_QUESTION_TOOL = "mcp__pdlc__AskUserQuestion";
+
 /** One option the user can pick. Mirrors Claude Code's own shape. */
 export interface AskOption {
   label: string;

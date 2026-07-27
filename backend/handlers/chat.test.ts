@@ -254,7 +254,9 @@ describe("Chat Handler - Permission Mode Tests", () => {
         options: expect.objectContaining({
           permissionMode: "plan",
           resume: "session-123",
-          allowedTools: ["Bash", "Edit"],
+          // The question tool is appended to whatever was granted, so the
+          // user is never prompted for permission to be asked a question.
+          allowedTools: ["Bash", "Edit", "mcp__pdlc__AskUserQuestion"],
           cwd: "/project/path",
           abortController: expect.any(AbortController),
           executable: "node",
@@ -682,5 +684,57 @@ describe("streaming input", () => {
     await iterator.next();
 
     expect(await iterator.next()).toEqual({ done: true, value: undefined });
+  });
+});
+
+describe("permissions for the question tool", () => {
+  function contextFor(request: Record<string, unknown>): Context {
+    return {
+      req: { json: vi.fn().mockResolvedValue(request) },
+      json: vi.fn((body: unknown, status?: number) => ({ body, status })),
+      var: { config: { cliPath: "/path/to/claude-cli" } },
+    } as unknown as Context;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockQuery.mockReturnValue({
+      [Symbol.asyncIterator]: async function* () {},
+      interrupt: vi.fn(),
+      next: vi.fn(),
+      return: vi.fn(),
+      throw: vi.fn(),
+    } as never);
+  });
+
+  it("auto-allows the question tool even with nothing else granted", async () => {
+    /*
+     * Observed once: a user in bypassPermissions was prompted before Claude
+     * could ask a question, though the same tool had been auto-allowed on
+     * every prior run. The cause of that one prompt is not established.
+     *
+     * Naming the tool explicitly makes it moot either way. It runs in-process,
+     * touches nothing, and its only effect is to render a card and wait — so
+     * there is no case where prompting for it protects anyone.
+     */
+    await handleChatRequest(
+      contextFor({ message: "hi", requestId: "p1" }),
+      new Map(),
+    );
+
+    expect(mockQuery.mock.calls[0][0].options?.allowedTools).toContain(
+      "mcp__pdlc__AskUserQuestion",
+    );
+  });
+
+  it("adds to what the permission flow granted rather than replacing it", async () => {
+    await handleChatRequest(
+      contextFor({ message: "hi", requestId: "p2", allowedTools: ["Bash"] }),
+      new Map(),
+    );
+
+    const allowed = mockQuery.mock.calls[0][0].options?.allowedTools;
+    expect(allowed).toContain("Bash");
+    expect(allowed).toContain("mcp__pdlc__AskUserQuestion");
   });
 });

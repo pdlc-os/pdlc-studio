@@ -15,6 +15,7 @@ import type {
 } from "../../shared/types.ts";
 import { logger } from "../utils/logger.ts";
 import {
+  ASK_USER_QUESTION_TOOL,
   cancelQuestions,
   createAskUserQuestionServer,
 } from "./askUserQuestion.ts";
@@ -183,7 +184,21 @@ async function* executeClaudeCommand(
           }),
         },
         ...(sessionId ? { resume: sessionId } : {}),
-        ...(allowedTools ? { allowedTools } : {}),
+        /*
+         * The question tool is always auto-allowed.
+         *
+         * A user in bypassPermissions was once prompted before Claude could
+         * ask them a question — a prompt to permit a prompt — although the
+         * same tool had been auto-allowed on every previous run. Why it
+         * happened that once is not established, so this is belt-and-braces
+         * rather than a fix for a diagnosed cause.
+         *
+         * Naming it is safe regardless: it runs in-process, touches nothing,
+         * and its only effect is to render a card and wait, so prompting for
+         * it protects no one. Appended to whatever the permission flow already
+         * granted rather than replacing it.
+         */
+        allowedTools: [...(allowedTools ?? []), ASK_USER_QUESTION_TOOL],
         ...(workingDirectory ? { cwd: workingDirectory } : {}),
         ...(permissionMode ? { permissionMode } : {}),
         /*
