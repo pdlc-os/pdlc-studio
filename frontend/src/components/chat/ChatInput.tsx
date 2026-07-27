@@ -8,7 +8,7 @@ import { Icon } from "@astryxdesign/core/Icon";
 import { Paperclip } from "lucide-react";
 import { KEYBOARD_SHORTCUTS } from "../../utils/constants";
 import { useEnterBehavior } from "../../hooks/useSettings";
-import { useSlashCommands } from "../../hooks/useSlashCommands";
+import { useSlashCommandsContext } from "../../hooks/useSlashCommandsContext";
 import { useAutoResizeTextarea } from "../../hooks/useAutoResizeTextarea";
 import {
   filterCommands,
@@ -72,8 +72,6 @@ interface ChatInputProps {
   showPermissions?: boolean;
   permissionData?: PermissionData;
   planPermissionData?: PlanPermissionData;
-  /** Scopes slash-command discovery; project-local commands depend on it. */
-  workingDirectory?: string;
   /** Files staged for the next message. */
   attachments?: AttachmentInfo[];
   attachmentError?: string | null;
@@ -139,7 +137,6 @@ export function ChatInput({
   showPermissions = false,
   permissionData,
   planPermissionData,
-  workingDirectory,
   attachments = [],
   attachmentError = null,
   isUploadingAttachments = false,
@@ -152,7 +149,7 @@ export function ChatInput({
   const [isComposing, setIsComposing] = useState(false);
   const { enterBehavior } = useEnterBehavior();
 
-  const { commands, models } = useSlashCommands(workingDirectory);
+  const { commands, models } = useSlashCommandsContext();
   const { model, effortLevel, thinking, updateSettings } = useSettings();
   const listboxId = useId();
   const [selectedIndex, setSelectedIndex] = useState(0);

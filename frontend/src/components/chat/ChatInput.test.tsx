@@ -11,6 +11,7 @@ import { useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { ChatInput } from "./ChatInput";
 import { AstryxProvider } from "../AstryxProvider";
+import { SlashCommandsProvider } from "../../contexts/SlashCommandsContext";
 import { SettingsProvider } from "../../contexts/SettingsContext";
 import type { SlashCommandInfo } from "../../types";
 
@@ -43,17 +44,18 @@ function Harness({ onSubmit = vi.fn() }: { onSubmit?: () => void }) {
     <MemoryRouter>
       <SettingsProvider>
         <AstryxProvider>
-          <ChatInput
-            input={input}
-            isLoading={false}
-            currentRequestId={null}
-            onInputChange={setInput}
-            onSubmit={onSubmit}
-            onAbort={vi.fn()}
-            permissionMode="default"
-            onPermissionModeChange={vi.fn()}
-            workingDirectory="/tmp/project"
-          />
+          <SlashCommandsProvider workingDirectory="/tmp/project">
+            <ChatInput
+              input={input}
+              isLoading={false}
+              currentRequestId={null}
+              onInputChange={setInput}
+              onSubmit={onSubmit}
+              onAbort={vi.fn()}
+              permissionMode="default"
+              onPermissionModeChange={vi.fn()}
+            />
+          </SlashCommandsProvider>
         </AstryxProvider>
       </SettingsProvider>
     </MemoryRouter>
@@ -385,19 +387,20 @@ describe("context island placement", () => {
       <MemoryRouter>
         <SettingsProvider>
           <AstryxProvider>
-            <ChatInput
-              input=""
-              isLoading={false}
-              currentRequestId={null}
-              onInputChange={vi.fn()}
-              onSubmit={vi.fn()}
-              onAbort={vi.fn()}
-              permissionMode="default"
-              onPermissionModeChange={vi.fn()}
-              workingDirectory="/tmp/project"
-              {...ISLAND_PROPS}
-              {...extra}
-            />
+            <SlashCommandsProvider workingDirectory="/tmp/project">
+              <ChatInput
+                input=""
+                isLoading={false}
+                currentRequestId={null}
+                onInputChange={vi.fn()}
+                onSubmit={vi.fn()}
+                onAbort={vi.fn()}
+                permissionMode="default"
+                onPermissionModeChange={vi.fn()}
+                {...ISLAND_PROPS}
+                {...extra}
+              />
+            </SlashCommandsProvider>
           </AstryxProvider>
         </SettingsProvider>
       </MemoryRouter>,

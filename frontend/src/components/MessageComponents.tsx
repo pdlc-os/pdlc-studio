@@ -27,6 +27,7 @@ import type {
 } from "../types";
 import { TimestampComponent } from "./TimestampComponent";
 import { CollapsibleDetails } from "./messages/CollapsibleDetails";
+import { CommandText } from "./chat/CommandText";
 import { MESSAGE_CONSTANTS } from "../utils/constants";
 import {
   createEditResult,
@@ -67,7 +68,9 @@ export function ChatMessageComponent({ message }: ChatMessageComponentProps) {
       }
     >
       {isUser ? (
-        <ChatMessageBubble>{message.content}</ChatMessageBubble>
+        <ChatMessageBubble>
+          <CommandText content={message.content} />
+        </ChatMessageBubble>
       ) : (
         // Assistant output is markdown from the SDK; render it as such rather
         // than as preformatted text.

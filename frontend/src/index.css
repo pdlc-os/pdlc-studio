@@ -501,6 +501,37 @@ body,
   }
 }
 
+/*
+ * The same command, once it is in the transcript.
+ *
+ * A command that loses its colour the moment it is sent reads as though what
+ * arrived differs from what was typed, so the sent message keeps the sweep the
+ * composer gave it. Shares --command-sweep with the composer and the picker so
+ * the three cannot drift.
+ */
+.transcript-command {
+  background-image: var(--command-sweep);
+  background-size: 100% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-family: var(--font-family-code);
+  font-weight: 600;
+}
+
+@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+  .transcript-command {
+    color: var(--color-text-primary);
+  }
+}
+
+@media (forced-colors: active) {
+  .transcript-command {
+    background-image: none;
+    color: CanvasText;
+  }
+}
+
 @media (forced-colors: active) {
   .composer-input-shell textarea {
     color: CanvasText;
