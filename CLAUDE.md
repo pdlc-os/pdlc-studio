@@ -1132,7 +1132,11 @@ optional dependencies, but this app keeps passing its own detected
 
 ### Individual Commands
 
-- Development: `make dev-backend` / `make dev-frontend`
+- Development: `make dev` runs both servers in one terminal; `make dev-backend`
+  / `make dev-frontend` still run them separately
+- `make dev-debug` is the same with per-message SDK payload logging on the
+  backend, which is off by default because it logs the full JSON of every
+  message and buries anything worth reading
 - Testing: `make test-frontend` / `make test-backend`
 - Build: `make build-backend` / `make build-frontend`
 

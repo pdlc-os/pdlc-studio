@@ -1,6 +1,6 @@
 # PDLC Studio - Development Tasks
 
-.PHONY: format format-check lint typecheck test build dev dev-backend-debug clean install install-frontend install-backend sync-brand
+.PHONY: format format-check lint typecheck test build dev dev-debug dev-backend-debug clean install install-frontend install-backend sync-brand
 
 # Formatting
 format: format-frontend format-backend
@@ -51,6 +51,30 @@ build-backend:
 	cd backend && deno task build
 
 # Development
+# Both servers in one terminal.
+#
+# `trap 'kill 0'` kills the whole process group on exit, so Ctrl-C stops the
+# backend and the frontend together. Without it, interrupting make leaves the
+# children running, holding :8080 and :3000 — after which the next `make dev`
+# dies with EADDRINUSE while a stale server keeps serving the old code.
+#
+# `wait` keeps make in the foreground so the trap has something to fire on.
+dev:
+	@echo "backend  -> http://localhost:8080"
+	@echo "frontend -> http://localhost:3000"
+	@echo "Ctrl-C stops both."
+	@trap 'kill 0' EXIT INT TERM; \
+	( cd backend && deno task dev ) & \
+	( cd frontend && npm run dev ) & \
+	wait
+
+# Same, with per-message SDK payload logging on the backend.
+dev-debug:
+	@trap 'kill 0' EXIT INT TERM; \
+	( cd backend && deno task dev:debug ) & \
+	( cd frontend && npm run dev ) & \
+	wait
+
 dev-frontend:
 	cd frontend && npm run dev
 dev-backend:
