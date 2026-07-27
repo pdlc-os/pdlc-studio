@@ -272,7 +272,7 @@ Playwright MCP server integration for automated browser testing and demo verific
 
 The Node floor is 22.9 because the dev task loads `.env` with
 `--env-file-if-exists`, which has no Node 20 backport. Plain `--env-file`
-exists from 20.6 but *errors* when the file is missing, and `.env` is
+exists from 20.6 but _errors_ when the file is missing, and `.env` is
 gitignored and absent by default.
 
 ### Port Configuration
@@ -846,6 +846,44 @@ Two things a transcript does that ordinary markdown does not:
 - **The parsed HTML is sanitized** (`utils/sanitizeHtml.ts`, allowlist over a
   `DOMParser` tree). `marked` does not sanitize, and Claude quotes whatever it
   read off the web or out of a repository into a file the user will open.
+
+## Agents and workflows
+
+A third tab beside Chat and Files, plus an island state, showing what the
+conversation's subagents and workflows are doing.
+
+**Built from task telemetry, not the transcript.** A workflow fans out to agents
+whose work never appears as messages, so the transcript shows a long pause where
+this shows the tree. The CLI reports lifecycle as a stream of small events —
+`task_started`, `task_progress`, `task_updated`, `task_notification`,
+`background_tasks_changed`, plus the top-level `tool_progress` — and nothing
+ever sends a snapshot, so `utils/agentActivity.ts` folds them into one.
+
+That reducer is deliberately pure, because the ordering rules are the whole
+substance of it: a late `progress` frame must not resurrect a finished task,
+`background_tasks_changed` has REPLACE semantics over the _live_ set only (an
+absent task ended, it was not deleted), and events arrive for tasks whose
+`started` was never seen, which synthesise a row rather than being dropped.
+
+`workflow_name` is set **only** when `task_type === "local_workflow"`, so it is
+the grouping key; everything else falls into one unnamed group rather than
+being filed under an invented heading.
+
+**This also fixed a live bug.** `task_progress`, `task_updated` and
+`task_notification` were never in `NON_DISPLAYED_SYSTEM_SUBTYPES`, so a running
+workflow dumped a raw JSON blob into the transcript for every frame — several
+per second per agent. They are folded into the panel _before_ the display
+filter, the same ordering `init` and `status` rely on.
+
+**Limitation: the telemetry is not persisted.** Session JSONL files contain no
+`task_*` entries, so a resumed conversation shows an empty panel until new
+agents run. The subagent's _work_ still appears in the transcript as a Task
+tool call and result; only the live tree is ephemeral. Nothing can be done
+about this from here.
+
+Note the header — title, star, export and the view toggle — renders for _every_
+tab. Scoping it to the chat branch left Files and Agents with no way back: the
+control that switches tabs vanished the moment it was used.
 
 ## Conversation Typography
 

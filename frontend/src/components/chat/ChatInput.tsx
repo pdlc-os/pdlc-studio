@@ -95,6 +95,8 @@ interface ChatInputProps {
   /** Drives the composer's status island. */
   contextUsage?: ContextUsage | null;
   cliStatus?: SDKStatus;
+  runningAgents?: number;
+  onShowAgents?: () => void;
 }
 
 /**
@@ -158,6 +160,8 @@ export function ChatInput({
   onRemoveAttachment,
   contextUsage = null,
   cliStatus = null,
+  runningAgents = 0,
+  onShowAgents,
 }: ChatInputProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [isComposing, setIsComposing] = useState(false);
@@ -630,7 +634,12 @@ export function ChatInput({
              * whole group was replaced by Stop for exactly the window the
              * island had something to say.
              */}
-            <ContextIsland usage={contextUsage} status={cliStatus} />
+            <ContextIsland
+              usage={contextUsage}
+              status={cliStatus}
+              runningAgents={runningAgents}
+              onShowAgents={onShowAgents}
+            />
             {isStopShown ? (
               <Button
                 type="button"

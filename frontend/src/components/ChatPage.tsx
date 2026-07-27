@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useMemo, useState } from "react";
+import { useEffect, useCallback, useMemo, useReducer, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ChatLayout } from "@astryxdesign/core/Chat";
 import { VStack } from "@astryxdesign/core/VStack";
@@ -34,6 +34,12 @@ import { useAttachments, withAttachments } from "../hooks/useAttachments";
 import { ConversationSidebar } from "./chat/ConversationSidebar";
 import { RenameConversationDialog } from "./chat/RenameConversationDialog";
 import { FilesPanel } from "./chat/FilesPanel";
+import { AgentsPanel } from "./chat/AgentsPanel";
+import {
+  EMPTY_ACTIVITY,
+  reduceAgentActivity,
+  runningTasks,
+} from "../utils/agentActivity";
 import { ExportMenu } from "./chat/ExportMenu";
 import { saveTranscript } from "../utils/saveTranscript";
 import type { ExportFormat } from "../utils/exportTranscript";
@@ -85,7 +91,9 @@ export function ChatPage() {
    * from the launch screen does not silently start a session the user has to
    * abandon. Keeping it in the URL means reload and the back button behave.
    */
-  const activeTab = searchParams.get("tab") === "files" ? "files" : "chat";
+  const tabParam = searchParams.get("tab");
+  const activeTab =
+    tabParam === "files" || tabParam === "agents" ? tabParam : "chat";
   const isNewSession = searchParams.get("new") === "1";
   const hasActiveConversation = isNewSession || isLoadedConversation;
 
@@ -111,6 +119,19 @@ export function ChatPage() {
   // result, status while a turn is in flight.
   const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
   const [cliStatus, setCliStatus] = useState<SDKStatus>(null);
+
+  /*
+   * The agents and workflows this conversation has spawned.
+   *
+   * A reducer rather than a pile of setState: the CLI reports task lifecycle
+   * as a stream of small events with real ordering rules — a late progress
+   * frame must not resurrect a finished task — and those rules belong in one
+   * tested place rather than in a callback here.
+   */
+  const [agentActivity, dispatchAgentEvent] = useReducer(
+    reduceAgentActivity,
+    EMPTY_ACTIVITY,
+  );
 
   const {
     conversations,
@@ -293,6 +314,7 @@ export function ChatPage() {
                 : null,
             ),
           onStatusChange: setCliStatus,
+          onAgentEvent: dispatchAgentEvent,
           shouldShowInitMessage: () => !hasShownInitMessage,
           onInitMessageShown: () => setHasShownInitMessage(true),
           get hasReceivedInit() {
@@ -486,7 +508,7 @@ export function ChatPage() {
     (tab: string) => {
       const next = new URLSearchParams(searchParams);
       // "chat" is the default, so it stays out of the URL.
-      if (tab === "files") next.set("tab", "files");
+      if (tab === "files" || tab === "agents") next.set("tab", tab);
       else next.delete("tab");
       navigate({ search: next.toString() });
     },
@@ -772,8 +794,6 @@ export function ChatPage() {
                   <Spinner size="lg" label="Loading conversation history..." />
                 </VStack>
               </div>
-            ) : activeTab === "files" ? (
-              <FilesPanel files={conversationFiles} />
             ) : (
               <div className="app-chat-region">
                 {/*
@@ -868,6 +888,10 @@ export function ChatPage() {
                           >
                             <SegmentedControlItem value="chat" label="Chat" />
                             <SegmentedControlItem value="files" label="Files" />
+                            <SegmentedControlItem
+                              value="agents"
+                              label="Agents"
+                            />
                           </SegmentedControl>
                           {/* Nothing to write out until the conversation has content. */}
                           <ExportMenu
@@ -890,52 +914,74 @@ export function ChatPage() {
                     </div>
                   </ContextMenu>
                 ) : null}
-                <ChatLayout
-                  emptyState={
-                    <EmptyState
-                      title="Start a conversation with Claude"
-                      description="Type your message below to begin."
+                {/*
+                 * Only the *content* switches per tab; the header above always
+                 * renders. It carries the view toggle, so scoping it to the
+                 * chat branch left Files and Agents with no way back — the
+                 * control that switches tabs vanished the moment it was used.
+                 */}
+                {activeTab === "agents" ? (
+                  <div className="app-scroll">
+                    <AgentsPanel
+                      activity={agentActivity}
+                      workingDirectory={workingDirectory}
                     />
-                  }
-                  composer={
-                    <ChatInput
-                      input={input}
-                      isLoading={isLoading}
-                      currentRequestId={currentRequestId}
-                      onInputChange={setInput}
-                      onSubmit={() => sendMessage()}
-                      onAbort={handleAbort}
-                      permissionMode={permissionMode}
-                      onPermissionModeChange={setPermissionMode}
-                      showPermissions={isPermissionMode}
-                      permissionData={permissionData}
-                      planPermissionData={planPermissionData}
-                      attachments={attachments}
-                      attachmentError={attachmentError}
-                      isUploadingAttachments={isUploadingAttachments}
-                      onAttachFiles={(files) => void addAttachments(files)}
-                      onRemoveAttachment={removeAttachment}
-                      contextUsage={contextUsage}
-                      cliStatus={cliStatus}
-                    />
-                  }
-                >
-                  {messages.length > 0 || isLoading ? (
-                    /*
-                     * Conversation typography is scoped to the transcript, not
-                     * the whole chat region: the composer is an input control and
-                     * stays on the UI font, so changing the reading face never
-                     * disturbs the thing you type into.
-                     */
-                    <div
-                      className="conversation-typography"
-                      data-font={conversationFont}
-                      data-size={conversationFontSize}
-                    >
-                      <ChatMessages messages={messages} isLoading={isLoading} />
-                    </div>
-                  ) : null}
-                </ChatLayout>
+                  </div>
+                ) : activeTab === "files" ? (
+                  <FilesPanel files={conversationFiles} />
+                ) : (
+                  <ChatLayout
+                    emptyState={
+                      <EmptyState
+                        title="Start a conversation with Claude"
+                        description="Type your message below to begin."
+                      />
+                    }
+                    composer={
+                      <ChatInput
+                        input={input}
+                        isLoading={isLoading}
+                        currentRequestId={currentRequestId}
+                        onInputChange={setInput}
+                        onSubmit={() => sendMessage()}
+                        onAbort={handleAbort}
+                        permissionMode={permissionMode}
+                        onPermissionModeChange={setPermissionMode}
+                        showPermissions={isPermissionMode}
+                        permissionData={permissionData}
+                        planPermissionData={planPermissionData}
+                        attachments={attachments}
+                        attachmentError={attachmentError}
+                        isUploadingAttachments={isUploadingAttachments}
+                        onAttachFiles={(files) => void addAttachments(files)}
+                        onRemoveAttachment={removeAttachment}
+                        contextUsage={contextUsage}
+                        cliStatus={cliStatus}
+                        runningAgents={runningTasks(agentActivity).length}
+                        onShowAgents={() => handleTabChange("agents")}
+                      />
+                    }
+                  >
+                    {messages.length > 0 || isLoading ? (
+                      /*
+                       * Conversation typography is scoped to the transcript, not
+                       * the whole chat region: the composer is an input control and
+                       * stays on the UI font, so changing the reading face never
+                       * disturbs the thing you type into.
+                       */
+                      <div
+                        className="conversation-typography"
+                        data-font={conversationFont}
+                        data-size={conversationFontSize}
+                      >
+                        <ChatMessages
+                          messages={messages}
+                          isLoading={isLoading}
+                        />
+                      </div>
+                    ) : null}
+                  </ChatLayout>
+                )}
               </div>
             )}
           </div>

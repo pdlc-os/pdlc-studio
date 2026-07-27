@@ -9,6 +9,8 @@ import type {
 } from "../types";
 import { readContextUsage, type ContextUsage } from "./contextUsage";
 import { readLocalCommandTurn } from "./localCommandTurns";
+import type { AgentEvent } from "./agentActivity";
+import { AGENT_TASK_SUBTYPES, toAgentEvent } from "./agentEvents";
 import {
   convertSystemMessage,
   convertResultMessage,
@@ -57,6 +59,15 @@ export const NON_DISPLAYED_SYSTEM_SUBTYPES: readonly string[] = [
   // context island; rendering it in the transcript would add a JSON dump per
   // turn.
   "status",
+  /*
+   * Task telemetry, which drives the Agents panel.
+   *
+   * `task_progress`, `task_updated` and `task_notification` were never listed,
+   * so running a workflow dumped a JSON blob into the transcript for every
+   * frame — several per second per agent. They are folded into the panel's
+   * state before this filter runs, so nothing is lost by hiding them.
+   */
+  ...AGENT_TASK_SUBTYPES,
 ];
 
 const NON_DISPLAYED_SYSTEM_SUBTYPE_SET: ReadonlySet<string> = new Set(
@@ -119,6 +130,8 @@ export interface ProcessingContext {
   onContextCompacted?: (postTokens: number) => void;
   /** Live CLI status; `compacting` is what drives the island's animation. */
   onStatusChange?: (status: SDKStatus) => void;
+  /** Task lifecycle, folded into the Agents panel's state. */
+  onAgentEvent?: (event: AgentEvent) => void;
 
   // Session handling
   onSessionId?: (sessionId: string) => void;
@@ -406,6 +419,14 @@ export class UnifiedMessageProcessor {
     if (message.subtype === "status") {
       const status = (message as { status?: SDKStatus }).status ?? null;
       context.onStatusChange?.(status);
+    }
+
+    // Reported before the display filter, for the same reason as `init`: these
+    // subtypes are hidden from the transcript but are the only source the
+    // Agents panel has.
+    if (context.onAgentEvent) {
+      const agentEvent = toAgentEvent(message, timestamp);
+      if (agentEvent) context.onAgentEvent(agentEvent);
     }
 
     // Compaction is the one event that makes the context reading fall rather

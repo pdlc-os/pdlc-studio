@@ -825,4 +825,197 @@ describe("useStreamParser", () => {
       );
     });
   });
+
+  /**
+   * Task telemetry drives the Agents panel. These subtypes used to fall
+   * through to the raw-JSON fallback, so a running workflow put a blob in the
+   * transcript for every frame — several per second per agent.
+   */
+  describe("agent task telemetry", () => {
+    function send(
+      result: ReturnType<
+        typeof renderHook<ReturnType<typeof useStreamParser>, unknown>
+      >,
+      data: unknown,
+      ctx: unknown,
+    ) {
+      result.result.current.processStreamLine(
+        JSON.stringify({ type: "claude_json", data }),
+        ctx as never,
+      );
+    }
+
+    it("reports a started task and keeps it out of the transcript", () => {
+      const hook = renderHook(() => useStreamParser());
+      const onAgentEvent = vi.fn();
+
+      send(
+        hook,
+        {
+          type: "system",
+          subtype: "task_started",
+          task_id: "t1",
+          description: "Review the parser",
+          subagent_type: "code-reviewer",
+          task_type: "local_workflow",
+          workflow_name: "review-changes",
+          session_id: "s1",
+          uuid: generateId(),
+        },
+        { ...mockContext, onAgentEvent },
+      );
+
+      expect(onAgentEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "started",
+          taskId: "t1",
+          workflowName: "review-changes",
+          subagentType: "code-reviewer",
+        }),
+      );
+      expect(mockContext.addMessage).not.toHaveBeenCalled();
+    });
+
+    it("reports progress and a terminal notification", () => {
+      const hook = renderHook(() => useStreamParser());
+      const onAgentEvent = vi.fn();
+      const ctx = { ...mockContext, onAgentEvent };
+
+      send(
+        hook,
+        {
+          type: "system",
+          subtype: "task_progress",
+          task_id: "t1",
+          description: "Reviewing",
+          last_tool_name: "Grep",
+          usage: { total_tokens: 1200, tool_uses: 3, duration_ms: 4500 },
+          session_id: "s1",
+          uuid: generateId(),
+        },
+        ctx,
+      );
+      send(
+        hook,
+        {
+          type: "system",
+          subtype: "task_notification",
+          task_id: "t1",
+          status: "completed",
+          output_file: "/tmp/out.md",
+          summary: "No issues found",
+          session_id: "s1",
+          uuid: generateId(),
+        },
+        ctx,
+      );
+
+      expect(onAgentEvent).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          kind: "progress",
+          lastToolName: "Grep",
+          usage: { totalTokens: 1200, toolUses: 3, durationMs: 4500 },
+        }),
+      );
+      expect(onAgentEvent).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          kind: "finished",
+          status: "completed",
+          outputFile: "/tmp/out.md",
+        }),
+      );
+      expect(mockContext.addMessage).not.toHaveBeenCalled();
+    });
+
+    it("maps the CLI's 'stopped' onto a killed task", () => {
+      const hook = renderHook(() => useStreamParser());
+      const onAgentEvent = vi.fn();
+
+      send(
+        hook,
+        {
+          type: "system",
+          subtype: "task_notification",
+          task_id: "t1",
+          status: "stopped",
+          session_id: "s1",
+          uuid: generateId(),
+        },
+        { ...mockContext, onAgentEvent },
+      );
+
+      expect(onAgentEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "finished", status: "killed" }),
+      );
+    });
+
+    it("reports tool progress for a task, and ignores main-thread tools", () => {
+      const hook = renderHook(() => useStreamParser());
+      const onAgentEvent = vi.fn();
+      const ctx = { ...mockContext, onAgentEvent };
+
+      send(
+        hook,
+        {
+          type: "tool_progress",
+          tool_use_id: "u1",
+          tool_name: "WebFetch",
+          parent_tool_use_id: null,
+          elapsed_time_seconds: 3,
+          task_id: "t1",
+          subagent_retry: { agent_id: "a1", attempt: 2, max_retries: 3 },
+          session_id: "s1",
+          uuid: generateId(),
+        },
+        ctx,
+      );
+      // No task_id: this is the main thread's own tool, not an agent's.
+      send(
+        hook,
+        {
+          type: "tool_progress",
+          tool_use_id: "u2",
+          tool_name: "Read",
+          parent_tool_use_id: null,
+          elapsed_time_seconds: 1,
+          session_id: "s1",
+          uuid: generateId(),
+        },
+        ctx,
+      );
+
+      expect(onAgentEvent).toHaveBeenCalledTimes(1);
+      expect(onAgentEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "tool",
+          toolName: "WebFetch",
+          retry: { attempt: 2, maxRetries: 3 },
+        }),
+      );
+    });
+
+    it("does not warn about tool_progress as an unknown type", () => {
+      const hook = renderHook(() => useStreamParser());
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      send(
+        hook,
+        {
+          type: "tool_progress",
+          tool_use_id: "u1",
+          tool_name: "Read",
+          parent_tool_use_id: null,
+          elapsed_time_seconds: 1,
+          session_id: "s1",
+          uuid: generateId(),
+        },
+        mockContext,
+      );
+
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+  });
 });
