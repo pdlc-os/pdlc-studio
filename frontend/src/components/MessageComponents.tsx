@@ -28,6 +28,7 @@ import type {
 import { TimestampComponent } from "./TimestampComponent";
 import { CollapsibleDetails } from "./messages/CollapsibleDetails";
 import { CommandText } from "./chat/CommandText";
+import { CopyMessageButton } from "./chat/CopyMessageButton";
 import { MESSAGE_CONSTANTS } from "../utils/constants";
 import {
   createEditResult,
@@ -64,6 +65,12 @@ export function ChatMessageComponent({ message }: ChatMessageComponentProps) {
       metadata={
         <ChatMessageMetadata
           timestamp={<TimestampComponent timestamp={message.timestamp} />}
+          footer={
+            <CopyMessageButton
+              text={message.content}
+              label={isUser ? "your message" : "Claude's reply"}
+            />
+          }
         />
       }
     >
@@ -264,6 +271,7 @@ export function PlanMessageComponent({ message }: PlanMessageComponentProps) {
       metadata={
         <ChatMessageMetadata
           timestamp={<TimestampComponent timestamp={message.timestamp} />}
+          footer={<CopyMessageButton text={message.plan} label="this plan" />}
         />
       }
     >
@@ -329,6 +337,19 @@ export function TodoMessageComponent({ message }: TodoMessageComponentProps) {
       metadata={
         <ChatMessageMetadata
           timestamp={<TimestampComponent timestamp={message.timestamp} />}
+          footer={
+            <CopyMessageButton
+              // As a markdown checklist, which is what it is — pasting
+              // "in_progress" into a document helps nobody.
+              text={message.todos
+                .map(
+                  (todo) =>
+                    `- [${todo.status === "completed" ? "x" : " "}] ${todo.content}`,
+                )
+                .join("\n")}
+              label="these todos"
+            />
+          }
         />
       }
     >

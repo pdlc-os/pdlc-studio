@@ -1832,3 +1832,27 @@ body,
 [data-mode] {
   font-weight: 700 !important;
 }
+
+/*
+ * The copy control sits in the metadata row and stays out of the way until
+ * wanted: visible on hover or keyboard focus, and always visible once it has
+ * something to report, so the confirmation is never missed.
+ */
+.copy-message-button {
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.astryx-chat-message:hover .copy-message-button,
+.copy-message-button:focus-visible,
+.copy-message-button[data-state="copied"],
+.copy-message-button[data-state="failed"] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  /* No hover to reveal it on touch, so it is simply always there. */
+  .copy-message-button {
+    opacity: 1;
+  }
+}
