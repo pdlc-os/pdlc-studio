@@ -1123,6 +1123,14 @@ Claude Code release it tracks in a `claudeCodeVersion` field.
 It is pinned in four places: `frontend/package.json`, `backend/package.json`
 (both `dependencies` and `peerDependencies`), and `backend/deno.json`.
 
+**`zod` is declared explicitly**, even though nothing but the SDK pulls it in.
+`backend/handlers/askUserQuestion.ts` imports it directly to build the tool
+schema, and for a while it resolved only because npm hoisted the SDK's own peer
+— undeclared, and therefore able to vanish under an SDK upgrade that changed
+its peer range. It is now in `backend/package.json` and `backend/deno.json` at
+`^4.0.0`, matching the SDK's peer. Same class of gap as the `commander` skew:
+code depending on something no manifest names.
+
 **Update Procedure**:
 
 1. Check versions: `grep -rn "@anthropic-ai/claude-agent-sdk" frontend/package.json backend/package.json backend/deno.json`
