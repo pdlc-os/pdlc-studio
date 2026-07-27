@@ -44,12 +44,17 @@ async function* executeClaudeCommand(
   let abortController: AbortController;
 
   try {
-    // Process commands that start with '/'
-    let processedMessage = message;
-    if (message.startsWith("/")) {
-      // Remove the '/' and send just the command
-      processedMessage = message.substring(1);
-    }
+    /*
+     * The message goes to the SDK exactly as typed.
+     *
+     * This used to strip a leading "/", inherited from a time when the command
+     * was passed as a CLI argument. Under the Agent SDK the slash is not
+     * decoration — it is what marks the prompt as a command. Stripping it
+     * turned "/compact" into the word "compact", which Claude answered in
+     * prose ("it's `/compact` (with the slash)") while no compaction ran, and
+     * did the same to every command the composer's `/` picker offers.
+     */
+    const processedMessage = message;
 
     // Create and store AbortController for this request
     abortController = new AbortController();

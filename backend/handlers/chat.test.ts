@@ -292,9 +292,10 @@ describe("Chat Handler - Permission Mode Tests", () => {
 
       await handleChatRequest(mockContext, requestAbortControllers);
 
-      // Should strip the slash and pass "help" to SDK
+      // The slash reaches the SDK, because it is what marks the prompt as a
+      // command rather than a message that happens to read like one.
       expect(mockQuery).toHaveBeenCalledWith({
-        prompt: "help",
+        prompt: "/help",
         options: expect.objectContaining({
           permissionMode: "plan",
         }),
