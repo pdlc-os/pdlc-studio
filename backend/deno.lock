@@ -1,31 +1,31 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@hono/hono@^4.8.5": "4.8.5",
-    "jsr:@logtape/logtape@1": "1.0.4",
-    "jsr:@logtape/logtape@^1.0.4": "1.0.4",
-    "jsr:@logtape/pretty@1": "1.0.4",
-    "jsr:@std/internal@^1.0.9": "1.0.9",
-    "jsr:@std/path@1": "1.1.1"
+    "jsr:@hono/hono@^4.8.5": "4.12.32",
+    "jsr:@logtape/logtape@^2.2.1": "2.2.4",
+    "jsr:@logtape/logtape@^2.2.4": "2.2.4",
+    "jsr:@logtape/pretty@^2.2.1": "2.2.4",
+    "jsr:@std/internal@^1.0.14": "1.0.14",
+    "jsr:@std/path@1": "1.1.6"
   },
   "jsr": {
-    "@hono/hono@4.8.5": {
-      "integrity": "78f72e532f378e379915a7e1ae7bd8a171b02324bd37b70877fd35375e8c2d6b"
+    "@hono/hono@4.12.32": {
+      "integrity": "e1274e968ee724176d7e35946c184d3cb8508f05e3f8ae6cee157c4f29ef148d"
     },
-    "@logtape/logtape@1.0.4": {
-      "integrity": "6ada87764d995b1033c352a17fd9e20b217f3672083bc2d8debe356eac03fe10"
+    "@logtape/logtape@2.2.4": {
+      "integrity": "8ee23b7c8d4b2e28c43a3a16027a7a27ed3d453c395c7d91b9960640399201ec"
     },
-    "@logtape/pretty@1.0.4": {
-      "integrity": "2c131a2135414df79d896ef6943f3643b335fb68e1857985fca89699d7580479",
+    "@logtape/pretty@2.2.4": {
+      "integrity": "42c433b8eb2efa5694c0752aeb55c64eb30cb3da6156075b8560bad87bb9f11f",
       "dependencies": [
-        "jsr:@logtape/logtape@^1.0.4"
+        "jsr:@logtape/logtape@^2.2.4"
       ]
     },
-    "@std/internal@1.0.9": {
-      "integrity": "bdfb97f83e4db7a13e8faab26fb1958d1b80cc64366501af78a0aee151696eb8"
+    "@std/internal@1.0.14": {
+      "integrity": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
     },
-    "@std/path@1.1.1": {
-      "integrity": "fe00026bd3a7e6a27f73709b83c607798be40e20c81dde655ce34052fd82ec76",
+    "@std/path@1.1.6": {
+      "integrity": "c68485c2a4dfbb5ae3cc74fae4e8c4e5d874cf8a8ed12927917235c758b46cbe",
       "dependencies": [
         "jsr:@std/internal"
       ]
@@ -34,8 +34,8 @@
   "workspace": {
     "dependencies": [
       "jsr:@hono/hono@^4.8.5",
-      "jsr:@logtape/logtape@1",
-      "jsr:@logtape/pretty@1",
+      "jsr:@logtape/logtape@^2.2.1",
+      "jsr:@logtape/pretty@^2.2.1",
       "jsr:@std/assert@1",
       "jsr:@std/path@1",
       "npm:@anthropic-ai/claude-agent-sdk@0.3.220",
@@ -45,18 +45,18 @@
       "dependencies": [
         "npm:@anthropic-ai/claude-agent-sdk@0.3.220",
         "npm:@hono/node-server@1",
-        "npm:@logtape/logtape@1",
-        "npm:@logtape/pretty@1",
+        "npm:@logtape/logtape@^2.2.1",
+        "npm:@logtape/pretty@^2.2.1",
         "npm:@types/node@^24.3.0",
-        "npm:@typescript-eslint/eslint-plugin@^8.44.0",
+        "npm:@typescript-eslint/eslint-plugin@^8.63.0",
         "npm:@typescript-eslint/parser@^8.44.0",
-        "npm:commander@14",
+        "npm:commander@15",
         "npm:esbuild@~0.25.6",
         "npm:eslint@9",
         "npm:hono@^4.8.5",
         "npm:prettier@^3.6.2",
         "npm:rimraf@6",
-        "npm:tsx@4",
+        "npm:tsx@^4.23.0",
         "npm:typescript@^5.9.0",
         "npm:vitest@^3.2.4"
       ]

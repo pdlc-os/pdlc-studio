@@ -23,8 +23,10 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
 
-    /* Path mapping */
-    "baseUrl": ".",
+    /* Path mapping.
+       No `baseUrl`: TypeScript 6 deprecates it, and since 4.1 `paths` resolve
+       relative to this file without one. The alias is kept because vite.config
+       declares the same mapping, though nothing imports through it yet. */
     "paths": {
       "@shared/*": ["../shared/*"]
     }
