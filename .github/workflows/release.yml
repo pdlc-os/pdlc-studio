@@ -181,6 +181,17 @@ jobs:
       # macOS ships as a mountable disk image. Renaming the executable to .dmg
       # would produce a file macOS cannot mount, so build a real UDZO image with
       # the binary inside. UDZO is compressed, which shrinks the download again.
+      # `hdiutil create` needs room for a whole second copy of the binary, and
+      # 1.0.0 failed here with "No space left on device" on both macOS runners.
+      # The dependency trees have already done their job — deno compile embeds
+      # what it needs — so they are just occupying the space the image wants.
+      - name: Reclaim disk space before packaging
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          rm -rf frontend/node_modules backend/node_modules
+          df -h / | tail -1
+
       - name: Package macOS disk image
         if: runner.os == 'macOS'
         run: |
@@ -188,12 +199,12 @@ jobs:
           STAGING="$RUNNER_TEMP/dmg"
           rm -rf "$STAGING"
           mkdir -p "$STAGING"
-          cp "dist/${{ matrix.artifact_name }}" "$STAGING/pdlc-studio"
+          # Moved, not copied: the raw binary is discarded after packaging
+          # anyway, and holding two copies at once is what ran the disk out.
+          mv "dist/${{ matrix.artifact_name }}" "$STAGING/pdlc-studio"
           chmod +x "$STAGING/pdlc-studio"
           hdiutil create -volname "PDLC Studio" -srcfolder "$STAGING" \
             -ov -format UDZO "dist/${{ matrix.artifact_name }}.dmg"
-          # Ship the image only, so there is one obvious macOS download.
-          rm "dist/${{ matrix.artifact_name }}"
 
       - name: Package Linux tarball
         if: runner.os == 'Linux'
