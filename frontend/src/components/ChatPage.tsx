@@ -1,16 +1,18 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ChatLayout } from "@astryxdesign/core/Chat";
 import { VStack } from "@astryxdesign/core/VStack";
 import { HStack } from "@astryxdesign/core/HStack";
-import { Text } from "@astryxdesign/core/Text";
 import { Button } from "@astryxdesign/core/Button";
-import { IconButton } from "@astryxdesign/core/IconButton";
-import { Icon } from "@astryxdesign/core/Icon";
 import { Spinner } from "@astryxdesign/core/Spinner";
 import { Banner } from "@astryxdesign/core/Banner";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Breadcrumbs, BreadcrumbItem } from "@astryxdesign/core/Breadcrumbs";
+import { ContextMenu } from "@astryxdesign/core/ContextMenu";
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@astryxdesign/core/SegmentedControl";
 import type {
   ChatRequest,
   ChatMessage,
@@ -24,12 +26,17 @@ import { usePermissionMode } from "../hooks/chat/usePermissionMode";
 import { useAbortController } from "../hooks/chat/useAbortController";
 import { useAutoHistoryLoader } from "../hooks/useHistoryLoader";
 import { useSettings } from "../hooks/useSettings";
+import { useConversationList } from "../hooks/useConversationList";
+import { useAttachments, withAttachments } from "../hooks/useAttachments";
+import { ConversationSidebar } from "./chat/ConversationSidebar";
+import { RenameConversationDialog } from "./chat/RenameConversationDialog";
+import { FilesPanel } from "./chat/FilesPanel";
+import { collectConversationFiles } from "../utils/conversationFiles";
+import type { ConversationSummary } from "../types";
 import { SettingsButton } from "./SettingsButton";
 import { SettingsModal } from "./SettingsModal";
-import { HistoryButton } from "./chat/HistoryButton";
 import { ChatInput } from "./chat/ChatInput";
 import { ChatMessages } from "./chat/ChatMessages";
-import { HistoryView } from "./HistoryView";
 import { AppIcon } from "./AppIcon";
 import { getChatUrl, getProjectsUrl } from "../config/api";
 import { KEYBOARD_SHORTCUTS } from "../utils/constants";
@@ -41,7 +48,13 @@ export function ChatPage() {
   const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const { conversationFont, conversationFontSize } = useSettings();
+  const {
+    conversationFont,
+    conversationFontSize,
+    model,
+    effortLevel,
+    thinking,
+  } = useSettings();
 
   // Extract and normalize working directory from URL
   const workingDirectory = (() => {
@@ -52,10 +65,21 @@ export function ChatPage() {
   })();
 
   // Get current view and sessionId from query parameters
-  const currentView = searchParams.get("view");
   const sessionId = searchParams.get("sessionId");
-  const isHistoryView = currentView === "history";
-  const isLoadedConversation = !!sessionId && !isHistoryView;
+  const isLoadedConversation = !!sessionId;
+
+  /*
+   * Opening a project no longer opens a conversation.
+   *
+   * A chat is active only when the URL says so — either a resumed `sessionId`
+   * or an explicit `new=1` from the New Session button. Landing on the bare
+   * project route shows the sidebar and an empty state instead, so arriving
+   * from the launch screen does not silently start a session the user has to
+   * abandon. Keeping it in the URL means reload and the back button behave.
+   */
+  const activeTab = searchParams.get("tab") === "files" ? "files" : "chat";
+  const isNewSession = searchParams.get("new") === "1";
+  const hasActiveConversation = isNewSession || isLoadedConversation;
 
   const { processStreamLine } = useClaudeStreaming();
   const { abortRequest, createAbortHandler } = useAbortController();
@@ -73,6 +97,32 @@ export function ChatPage() {
 
     return project?.encodedName || null;
   }, [workingDirectory, projects]);
+
+  const [conversationSearch, setConversationSearch] = useState("");
+
+  const {
+    conversations,
+    isLoading: conversationsLoading,
+    error: conversationsError,
+    refresh: refreshConversations,
+    rename: renameConversation,
+    remove: removeConversation,
+    clearAll: clearAllConversations,
+    isSearching: isSearchingConversations,
+  } = useConversationList(getEncodedName(), conversationSearch);
+
+  const [renameTarget, setRenameTarget] = useState<ConversationSummary | null>(
+    null,
+  );
+
+  const {
+    attachments,
+    isUploading: isUploadingAttachments,
+    error: attachmentError,
+    add: addAttachments,
+    remove: removeAttachment,
+    clear: clearAttachments,
+  } = useAttachments();
 
   // Load conversation history if sessionId is provided
   const {
@@ -110,6 +160,20 @@ export function ChatPage() {
     initialSessionId: loadedSessionId || undefined,
   });
 
+  /**
+   * The session actually on screen.
+   *
+   * A new conversation has no id in the URL until the SDK's init message
+   * reports one, so the live id is needed to name it at all.
+   *
+   * The live id also *wins* over the URL's. Resuming can continue under a new
+   * session id, and the CLI writes the title under that one — so a header
+   * keyed on the stale URL id looks up a row the listing no longer contains
+   * and falls back to "Untitled conversation" while the sidebar shows the real
+   * name. Preferring the live id keeps the two in agreement.
+   */
+  const activeSessionKey = currentSessionId ?? sessionId ?? null;
+
   const {
     allowedTools,
     permissionRequest,
@@ -146,8 +210,12 @@ export function ChatPage() {
       hideUserMessage = false,
       overridePermissionMode?: PermissionMode,
     ) => {
-      const content = messageContent || input.trim();
-      if (!content || isLoading) return;
+      const typed = messageContent || input.trim();
+      // Attachments belong to the message that names them: an empty box with a
+      // file staged is still a real message, so allow sending on either.
+      if ((!typed && attachments.length === 0) || isLoading) return;
+
+      const content = withAttachments(typed, attachments);
 
       const requestId = generateRequestId();
 
@@ -163,6 +231,7 @@ export function ChatPage() {
       }
 
       if (!messageContent) clearInput();
+      clearAttachments();
       startRequest();
 
       try {
@@ -176,6 +245,10 @@ export function ChatPage() {
             allowedTools: tools || allowedTools,
             ...(workingDirectory ? { workingDirectory } : {}),
             permissionMode: overridePermissionMode || permissionMode,
+            // Omitted when unset so the CLI's own configured defaults stand.
+            ...(model && model !== "default" ? { model } : {}),
+            ...(effortLevel ? { effortLevel } : {}),
+            ...(thinking ? { thinking } : {}),
           } as ChatRequest),
         });
 
@@ -258,6 +331,11 @@ export function ChatPage() {
       processStreamLine,
       handlePermissionError,
       createAbortHandler,
+      attachments,
+      clearAttachments,
+      model,
+      effortLevel,
+      thinking,
     ],
   );
 
@@ -369,15 +447,119 @@ export function ChatPage() {
       }
     : undefined;
 
-  const handleHistoryClick = useCallback(() => {
-    const searchParams = new URLSearchParams();
-    searchParams.set("view", "history");
-    navigate({ search: searchParams.toString() });
-  }, [navigate]);
-
   const handleSettingsClick = useCallback(() => {
     setIsSettingsOpen(true);
   }, []);
+
+  const conversationFiles = useMemo(
+    () => collectConversationFiles(messages, workingDirectory),
+    [messages, workingDirectory],
+  );
+
+  const handleTabChange = useCallback(
+    (tab: string) => {
+      const next = new URLSearchParams(searchParams);
+      // "chat" is the default, so it stays out of the URL.
+      if (tab === "files") next.set("tab", "files");
+      else next.delete("tab");
+      navigate({ search: next.toString() });
+    },
+    [navigate, searchParams],
+  );
+
+  const handleSelectConversation = useCallback(
+    (selectedSessionId: string) => {
+      navigate({
+        search: `?sessionId=${encodeURIComponent(selectedSessionId)}`,
+      });
+    },
+    [navigate],
+  );
+
+  const handleNewSession = useCallback(() => {
+    navigate({ search: "?new=1" });
+  }, [navigate]);
+
+  const handleRenameConfirm = useCallback(
+    async (title: string) => {
+      if (!renameTarget) return;
+      const target = renameTarget;
+      setRenameTarget(null);
+      try {
+        await renameConversation(target.sessionId, title);
+      } catch (error) {
+        console.error("Failed to rename conversation", error);
+      }
+    },
+    [renameTarget, renameConversation],
+  );
+
+  const handleDeleteConversation = useCallback(
+    async (conversation: ConversationSummary) => {
+      // Deleting the session that is currently open would leave the transcript
+      // showing a conversation that no longer exists, so step back to the
+      // empty state first.
+      // Compared against the live session, not just a URL-carried one, so
+      // deleting a conversation started in this tab also closes it.
+      const wasOpen = conversation.sessionId === activeSessionKey;
+      try {
+        await removeConversation(conversation.sessionId);
+        if (wasOpen) navigate({ search: "" });
+      } catch (error) {
+        console.error("Failed to delete conversation", error);
+      }
+    },
+    [removeConversation, activeSessionKey, navigate],
+  );
+
+  const handleCloseConversation = useCallback(() => {
+    navigate({ search: "" });
+  }, [navigate]);
+
+  const handleClearAllConversations = useCallback(async () => {
+    try {
+      await clearAllConversations();
+      navigate({ search: "" });
+    } catch (error) {
+      console.error("Failed to clear conversation history", error);
+    }
+  }, [clearAllConversations, navigate]);
+
+  /** The open conversation's summary, for the header's rename action. */
+  const activeConversation =
+    conversations.find(
+      (conversation) => conversation.sessionId === activeSessionKey,
+    ) ?? null;
+
+  /*
+   * Keep the sidebar in step with the conversation being had.
+   *
+   * Two moments matter: the session becoming real (it should appear in the
+   * list), and a turn finishing (the CLI writes an `ai-title` around then, so
+   * the row's name changes from "Untitled conversation").
+   *
+   * The title is written asynchronously, and not reliably before the result
+   * message lands — so a single refetch on completion often reads the file
+   * just too early. A second pass a few seconds later catches it without
+   * polling indefinitely.
+   */
+  const TITLE_SETTLE_MS = 3000;
+
+  useEffect(() => {
+    if (!currentSessionId) return;
+    void refreshConversations();
+  }, [currentSessionId, refreshConversations]);
+
+  useEffect(() => {
+    if (isLoading || !currentSessionId) return;
+
+    void refreshConversations();
+    const timer = setTimeout(
+      () => void refreshConversations(),
+      TITLE_SETTLE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [isLoading, currentSessionId, refreshConversations]);
 
   const handleSettingsClose = useCallback(() => {
     setIsSettingsOpen(false);
@@ -399,25 +581,9 @@ export function ChatPage() {
     loadProjects();
   }, []);
 
-  const handleBackToChat = useCallback(() => {
-    navigate({ search: "" });
-  }, [navigate]);
-
-  const handleBackToHistory = useCallback(() => {
-    const searchParams = new URLSearchParams();
-    searchParams.set("view", "history");
-    navigate({ search: searchParams.toString() });
-  }, [navigate]);
-
   const handleBackToProjects = useCallback(() => {
     navigate("/");
   }, [navigate]);
-
-  const handleBackToProjectChat = useCallback(() => {
-    if (workingDirectory) {
-      navigate(`/projects${workingDirectory}`);
-    }
-  }, [navigate, workingDirectory]);
 
   // Handle global keyboard shortcuts
   useEffect(() => {
@@ -443,22 +609,6 @@ export function ChatPage() {
          * app name it is supposed to sit next to.
          */}
         <HStack gap={3} vAlign="start">
-          {isHistoryView && (
-            <IconButton
-              onClick={handleBackToChat}
-              label="Back to chat"
-              variant="secondary"
-              icon={<Icon icon="chevronLeft" />}
-            />
-          )}
-          {isLoadedConversation && (
-            <IconButton
-              onClick={handleBackToHistory}
-              label="Back to history"
-              variant="secondary"
-              icon={<Icon icon="chevronLeft" />}
-            />
-          )}
           {/*
            * The mark sits outside Breadcrumbs rather than inside the first
            * item: BreadcrumbItem renders a link, and burying an image in it
@@ -471,61 +621,39 @@ export function ChatPage() {
             onClick={handleBackToProjects}
             aria-label="PDLC Studio home"
           >
-            <AppIcon size={32} variant="mark" />
+            <AppIcon size={40} variant="mark" />
           </button>
           <VStack gap={1}>
+            {/*
+             * Right-clicking the header renames the open conversation, the
+             * same action the sidebar row offers — the header is where the
+             * name is showing, so it is where people reach for it.
+             */}
             <Breadcrumbs label="Breadcrumb">
               <BreadcrumbItem onClick={handleBackToProjects}>
-                PDLC Studio
+                <span className="app-name">PDLC Studio</span>
               </BreadcrumbItem>
-              {(isHistoryView || sessionId) && (
-                <BreadcrumbItem isCurrent>
-                  {isHistoryView ? "Conversation History" : "Conversation"}
-                </BreadcrumbItem>
-              )}
             </Breadcrumbs>
-            {workingDirectory && (
-              <HStack gap={2} vAlign="center" wrap="wrap">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleBackToProjectChat}
-                  label={workingDirectory}
-                  aria-label={`Return to new chat in ${workingDirectory}`}
-                />
-                {sessionId && (
-                  <Text type="supporting" size="xsm" color="secondary">
-                    Session: {sessionId.substring(0, 8)}...
-                  </Text>
-                )}
-              </HStack>
-            )}
           </VStack>
         </HStack>
         <HStack gap={3} vAlign="center">
-          {!isHistoryView && <HistoryButton onClick={handleHistoryClick} />}
+          {hasActiveConversation ? (
+            <SegmentedControl
+              label="Conversation view"
+              size="sm"
+              value={activeTab}
+              onChange={handleTabChange}
+            >
+              <SegmentedControlItem value="chat" label="Chat" />
+              <SegmentedControlItem value="files" label="Files" />
+            </SegmentedControl>
+          ) : null}
           <SettingsButton onClick={handleSettingsClick} />
         </HStack>
       </HStack>
 
       {/* Main Content */}
-      {isHistoryView ? (
-        <HistoryView
-          workingDirectory={workingDirectory || ""}
-          encodedName={getEncodedName()}
-          onBack={handleBackToChat}
-        />
-      ) : historyLoading ? (
-        /* Loading conversation history */
-        <VStack
-          className="app-scroll"
-          justify="center"
-          hAlign="center"
-          height="100%"
-        >
-          <Spinner size="lg" label="Loading conversation history..." />
-        </VStack>
-      ) : historyError ? (
+      {historyError ? (
         /* Error loading conversation history */
         <div className="app-scroll">
           <Banner
@@ -543,52 +671,167 @@ export function ChatPage() {
           />
         </div>
       ) : (
-        <div className="app-chat-region">
-          <ChatLayout
-            emptyState={
-              <EmptyState
-                title="Start a conversation with Claude"
-                description="Type your message below to begin."
-              />
-            }
-            composer={
-              <ChatInput
-                input={input}
-                isLoading={isLoading}
-                currentRequestId={currentRequestId}
-                onInputChange={setInput}
-                onSubmit={() => sendMessage()}
-                onAbort={handleAbort}
-                permissionMode={permissionMode}
-                onPermissionModeChange={setPermissionMode}
-                showPermissions={isPermissionMode}
-                permissionData={permissionData}
-                planPermissionData={planPermissionData}
-                workingDirectory={workingDirectory || undefined}
-              />
-            }
-          >
-            {messages.length > 0 || isLoading ? (
-              /*
-               * Conversation typography is scoped to the transcript, not the
-               * whole chat region: the composer is an input control and stays
-               * on the UI font, so changing the reading face never disturbs
-               * the thing you type into.
-               */
-              <div
-                className="conversation-typography"
-                data-font={conversationFont}
-                data-size={conversationFontSize}
+        <div className="chat-shell">
+          {workingDirectory && (
+            <ConversationSidebar
+              projectPath={workingDirectory}
+              conversations={conversations}
+              isLoading={conversationsLoading}
+              error={conversationsError}
+              activeSessionId={activeSessionKey}
+              onSelect={handleSelectConversation}
+              onNewSession={handleNewSession}
+              onRefresh={() => void refreshConversations()}
+              onRename={setRenameTarget}
+              onDelete={(conversation) =>
+                void handleDeleteConversation(conversation)
+              }
+              onClose={handleCloseConversation}
+              searchTerm={conversationSearch}
+              onSearchChange={setConversationSearch}
+              isSearching={isSearchingConversations}
+              onClearAll={() => void handleClearAllConversations()}
+            />
+          )}
+
+          {!hasActiveConversation ? (
+            /*
+             * Nothing is open. Deliberately not an empty chat: arriving from
+             * the launch screen should not start a session the user then has
+             * to abandon.
+             */
+            <div className="app-chat-region" data-testid="no-conversation">
+              <VStack justify="center" hAlign="center" height="100%" gap={3}>
+                <EmptyState
+                  title="No conversation open"
+                  description="Pick a conversation on the left to carry on where you left off, or start a new session."
+                />
+                <Button
+                  variant="primary"
+                  onClick={handleNewSession}
+                  label="New Session"
+                />
+              </VStack>
+            </div>
+          ) : historyLoading ? (
+            /*
+             * Scoped to the transcript pane. This used to replace the whole
+             * shell, so clicking a conversation made the sidebar and the
+             * conversation header vanish until the messages arrived.
+             */
+            <div className="app-chat-region">
+              <VStack justify="center" hAlign="center" height="100%">
+                <Spinner size="lg" label="Loading conversation history..." />
+              </VStack>
+            </div>
+          ) : activeTab === "files" ? (
+            <FilesPanel
+              files={conversationFiles}
+              workingDirectory={workingDirectory || undefined}
+            />
+          ) : (
+            <div className="app-chat-region">
+              {/*
+               * (3) The conversation's own header, inside the pane it belongs
+               * to. It used to sit in the page header, where it started at the
+               * far left of the window and so read as a sibling of the app
+               * name rather than as the title of what is on the right.
+               *
+               * Right-clicking it renames, the same action the sidebar row
+               * offers — this is where the name is showing.
+               */}
+              {hasActiveConversation ? (
+                <ContextMenu
+                  label="Conversation actions"
+                  isDisabled={activeConversation === null}
+                  items={[
+                    {
+                      label: "Rename conversation",
+                      onClick: () => setRenameTarget(activeConversation),
+                    },
+                    {
+                      label: "Close conversation",
+                      onClick: handleCloseConversation,
+                    },
+                  ]}
+                >
+                  <div className="conversation-header">
+                    <span className="conversation-header-title">
+                      {activeConversation?.title ?? "Untitled conversation"}
+                    </span>
+                    {/*
+                     * In full: a truncated UUID cannot be matched against
+                     * `claude --resume` output or a log line, which is the
+                     * only reason to show it.
+                     */}
+                    {/* Absent until the SDK reports the id for a new session. */}
+                    {activeSessionKey ? (
+                      <span className="conversation-header-session">
+                        {activeSessionKey}
+                      </span>
+                    ) : null}
+                  </div>
+                </ContextMenu>
+              ) : null}
+              <ChatLayout
+                emptyState={
+                  <EmptyState
+                    title="Start a conversation with Claude"
+                    description="Type your message below to begin."
+                  />
+                }
+                composer={
+                  <ChatInput
+                    input={input}
+                    isLoading={isLoading}
+                    currentRequestId={currentRequestId}
+                    onInputChange={setInput}
+                    onSubmit={() => sendMessage()}
+                    onAbort={handleAbort}
+                    permissionMode={permissionMode}
+                    onPermissionModeChange={setPermissionMode}
+                    showPermissions={isPermissionMode}
+                    permissionData={permissionData}
+                    planPermissionData={planPermissionData}
+                    workingDirectory={workingDirectory || undefined}
+                    attachments={attachments}
+                    attachmentError={attachmentError}
+                    isUploadingAttachments={isUploadingAttachments}
+                    onAttachFiles={(files) => void addAttachments(files)}
+                    onRemoveAttachment={removeAttachment}
+                  />
+                }
               >
-                <ChatMessages messages={messages} isLoading={isLoading} />
-              </div>
-            ) : null}
-          </ChatLayout>
+                {messages.length > 0 || isLoading ? (
+                  /*
+                   * Conversation typography is scoped to the transcript, not
+                   * the whole chat region: the composer is an input control and
+                   * stays on the UI font, so changing the reading face never
+                   * disturbs the thing you type into.
+                   */
+                  <div
+                    className="conversation-typography"
+                    data-font={conversationFont}
+                    data-size={conversationFontSize}
+                  >
+                    <ChatMessages messages={messages} isLoading={isLoading} />
+                  </div>
+                ) : null}
+              </ChatLayout>
+            </div>
+          )}
         </div>
       )}
 
       {/* Settings Modal */}
       <SettingsModal isOpen={isSettingsOpen} onClose={handleSettingsClose} />
+
+      <RenameConversationDialog
+        isOpen={renameTarget !== null}
+        initialTitle={renameTarget?.title ?? ""}
+        onCancel={() => setRenameTarget(null)}
+        onConfirm={(title) => void handleRenameConfirm(title)}
+      />
     </div>
   );
 }

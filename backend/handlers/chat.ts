@@ -4,7 +4,12 @@ import {
   query,
   type PermissionMode,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { ChatRequest, StreamResponse } from "../../shared/types.ts";
+import type {
+  ChatRequest,
+  EffortLevel,
+  StreamResponse,
+  ThinkingMode,
+} from "../../shared/types.ts";
 import { logger } from "../utils/logger.ts";
 import {
   resolvePermissionMode,
@@ -32,6 +37,9 @@ async function* executeClaudeCommand(
   allowedTools?: string[],
   workingDirectory?: string,
   permissionMode?: PermissionMode,
+  model?: string,
+  effortLevel?: EffortLevel,
+  thinking?: ThinkingMode,
 ): AsyncGenerator<StreamResponse> {
   let abortController: AbortController;
 
@@ -67,6 +75,25 @@ async function* executeClaudeCommand(
         ...(allowedTools ? { allowedTools } : {}),
         ...(workingDirectory ? { cwd: workingDirectory } : {}),
         ...(permissionMode ? { permissionMode } : {}),
+        /*
+         * All three are omitted unless chosen, so the CLI's own defaults stand.
+         * Sending an explicit value for every request would override whatever
+         * the user configured in their settings.json.
+         */
+        ...(model ? { model } : {}),
+        ...(effortLevel ? { effortLevel } : {}),
+        ...(thinking
+          ? {
+              // `enabled` needs a budget; the SDK treats adaptive as
+              // "Claude decides", which is the sensible default when on.
+              thinking:
+                thinking === "enabled"
+                  ? ({ type: "enabled" } as const)
+                  : thinking === "disabled"
+                    ? ({ type: "disabled" } as const)
+                    : ({ type: "adaptive" } as const),
+            }
+          : {}),
       },
     })) {
       // Debug logging of raw SDK messages with detailed content
@@ -142,6 +169,9 @@ export async function handleChatRequest(
           chatRequest.allowedTools,
           chatRequest.workingDirectory,
           permissionMode,
+          chatRequest.model,
+          chatRequest.effortLevel,
+          chatRequest.thinking,
         )) {
           const data = JSON.stringify(chunk) + "\n";
           controller.enqueue(new TextEncoder().encode(data));

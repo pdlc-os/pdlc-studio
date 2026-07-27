@@ -1,6 +1,8 @@
 import { Context } from "hono";
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type {
+  EffortLevel,
+  ModelOption,
   SlashCommandInfo,
   SlashCommandsResponse,
 } from "../../shared/types.ts";
@@ -23,8 +25,12 @@ const CACHE_TTL_MS = 60_000;
  */
 const DISCOVERY_TIMEOUT_MS = 15_000;
 
-interface CacheEntry {
+interface Discovered {
   commands: SlashCommandInfo[];
+  models: ModelOption[];
+}
+
+interface CacheEntry extends Discovered {
   expiresAt: number;
 }
 
@@ -37,7 +43,7 @@ const cache = new Map<string, CacheEntry>();
  * would otherwise let several of them spawn their own CLI process for the same
  * directory. Sharing the promise collapses them into one spawn.
  */
-const inFlight = new Map<string, Promise<SlashCommandInfo[]>>();
+const inFlight = new Map<string, Promise<Discovered>>();
 
 /**
  * A prompt that never produces a message.
@@ -64,7 +70,7 @@ async function* idlePrompt(
 async function discoverCommands(
   cliPath: string,
   workingDirectory?: string,
-): Promise<SlashCommandInfo[]> {
+): Promise<Discovered> {
   let releasePrompt: () => void = () => {};
   const release = new Promise<void>((resolve) => {
     releasePrompt = resolve;
@@ -90,12 +96,34 @@ async function discoverCommands(
       DISCOVERY_TIMEOUT_MS,
     );
 
-    return init.commands.map((command) => ({
-      name: command.name,
-      description: command.description,
-      argumentHint: command.argumentHint,
-      ...(command.aliases?.length ? { aliases: command.aliases } : {}),
-    }));
+    return {
+      commands: (init.commands ?? []).map((command) => ({
+        name: command.name,
+        description: command.description,
+        argumentHint: command.argumentHint,
+        ...(command.aliases?.length ? { aliases: command.aliases } : {}),
+      })),
+      // The same handshake reports the models this CLI offers, along with
+      // which of them honour effort and adaptive thinking — so the UI can grey
+      // out controls a model would ignore rather than pretending they apply.
+      models: (init.models ?? []).map((model) => ({
+        value: model.value,
+        displayName: model.displayName,
+        description: model.description,
+        ...(model.supportsEffort !== undefined
+          ? { supportsEffort: model.supportsEffort }
+          : {}),
+        ...(model.supportedEffortLevels
+          ? {
+              supportedEffortLevels:
+                model.supportedEffortLevels as EffortLevel[],
+            }
+          : {}),
+        ...(model.supportsAdaptiveThinking !== undefined
+          ? { supportsAdaptiveThinking: model.supportsAdaptiveThinking }
+          : {}),
+      })),
+    };
   } finally {
     // Order matters: let the generator finish before closing, so the CLI sees a
     // clean end-of-input instead of a severed pipe.
@@ -137,7 +165,10 @@ export async function handleCommandsRequest(c: Context) {
 
   const cached = cache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
-    return c.json<SlashCommandsResponse>({ commands: cached.commands });
+    return c.json<SlashCommandsResponse>({
+      commands: cached.commands,
+      models: cached.models,
+    });
   }
 
   let discovery = inFlight.get(cacheKey);
@@ -153,15 +184,22 @@ export async function handleCommandsRequest(c: Context) {
   }
 
   try {
-    const commands = await discovery;
-    cache.set(cacheKey, { commands, expiresAt: Date.now() + CACHE_TTL_MS });
-    logger.api.debug("Discovered {count} slash commands for {cwd}", {
-      count: commands.length,
-      cwd: workingDirectory ?? "(default)",
+    const discovered = await discovery;
+    cache.set(cacheKey, {
+      ...discovered,
+      expiresAt: Date.now() + CACHE_TTL_MS,
     });
-    return c.json<SlashCommandsResponse>({ commands });
+    logger.api.debug(
+      "Discovered {commands} commands and {models} models for {cwd}",
+      {
+        commands: discovered.commands.length,
+        models: discovered.models.length,
+        cwd: workingDirectory ?? "(default)",
+      },
+    );
+    return c.json<SlashCommandsResponse>(discovered);
   } catch (error) {
     logger.api.warn("Slash command discovery failed: {error}", { error });
-    return c.json<SlashCommandsResponse>({ commands: [] });
+    return c.json<SlashCommandsResponse>({ commands: [], models: [] });
   }
 }

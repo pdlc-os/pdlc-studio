@@ -4,6 +4,7 @@ import { ChatMessageMetadata } from "@astryxdesign/core/Chat";
 import { ChatToolCalls } from "@astryxdesign/core/Chat";
 import type { ChatToolCallItem } from "@astryxdesign/core/Chat";
 import { CodeBlock } from "@astryxdesign/core/CodeBlock";
+import { languageFromPath } from "../utils/codeLanguage";
 import { Markdown } from "@astryxdesign/core/Markdown";
 import { Card } from "@astryxdesign/core/Card";
 import { VStack } from "@astryxdesign/core/VStack";
@@ -186,6 +187,15 @@ export function ToolResultMessageComponent({
     }
     displayContent = toolUseResult.stdout || message.content;
     language = "bash";
+  }
+
+  /*
+   * Everything else — a Read of a source file, a Write's echo — falls back to
+   * the file's own extension. Without this those blocks render as plaintext,
+   * which is most of the code this app shows.
+   */
+  if (!language) {
+    language = languageFromPath(message.filePath);
   }
 
   const call: ChatToolCallItem = {

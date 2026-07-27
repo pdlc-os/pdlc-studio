@@ -10,9 +10,21 @@ import type {
 import { logger } from "../utils/logger.ts";
 import { readTextFile, readDir } from "../utils/fs.ts";
 
-// Raw JSONL line structure from Claude history files
+/**
+ * Raw JSONL line structure from Claude history files.
+ *
+ * `type` is far wider than the four cases this app reads — a live session file
+ * also carries `custom-title`, `ai-title`, `mode`, `attachment`,
+ * `file-history-snapshot` and more. The union below names only what is
+ * consumed; everything else parses into this shape and is ignored, which is
+ * why the field is not exhaustive.
+ */
 export interface RawHistoryLine {
-  type: "user" | "assistant" | "system" | "result";
+  type: "user" | "assistant" | "system" | "result" | (string & {});
+  /** Present on `custom-title` lines: the name set by `/rename`. */
+  customTitle?: string;
+  /** Present on `ai-title` lines: the generated name. */
+  aiTitle?: string;
   message?: SDKUserMessage["message"] | SDKAssistantMessage["message"];
   sessionId: string;
   timestamp: string; // ISO string format
@@ -55,6 +67,9 @@ export interface ConversationFile {
   lastTime: string;
   messageCount: number;
   lastMessagePreview: string;
+  /** Latest custom or generated title; see ConversationSummary.title. */
+  title?: string;
+  isTitleCustom?: boolean;
 }
 
 /**
@@ -80,6 +95,10 @@ async function parseHistoryFile(
     let startTime = "";
     let lastTime = "";
     let lastMessagePreview = "";
+    // Both title kinds are appended, not replaced — a long session accumulates
+    // one per turn — so the last of each wins.
+    let customTitle = "";
+    let aiTitle = "";
 
     for (const line of lines) {
       try {
@@ -92,6 +111,12 @@ async function parseHistoryFile(
           if (messageId) {
             messageIds.add(messageId);
           }
+        }
+
+        if (parsed.type === "custom-title" && parsed.customTitle) {
+          customTitle = parsed.customTitle;
+        } else if (parsed.type === "ai-title" && parsed.aiTitle) {
+          aiTitle = parsed.aiTitle;
         }
 
         // Track timestamps
@@ -129,6 +154,9 @@ async function parseHistoryFile(
     const fileName = filePath.split("/").pop() || "";
     const sessionId = fileName.replace(".jsonl", "");
 
+    // A rename is the user's explicit choice, so it outranks the generated one.
+    const title = customTitle || aiTitle;
+
     return {
       sessionId,
       filePath,
@@ -138,6 +166,7 @@ async function parseHistoryFile(
       lastTime,
       messageCount: messages.length,
       lastMessagePreview: lastMessagePreview || "No preview available",
+      ...(title ? { title, isTitleCustom: customTitle !== "" } : {}),
     };
   } catch (error) {
     logger.history.error(`Failed to read history file ${filePath}: {error}`, {

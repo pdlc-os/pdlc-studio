@@ -66,6 +66,25 @@ export type ToolMessage = {
   type: "tool";
   content: string;
   timestamp: number;
+  /**
+   * Structured copy of what the display string was built from.
+   *
+   * `content` is formatted for reading ("Write(file_path: ...)"), and the
+   * Files tab needs the path itself. Captured here at creation, where the tool
+   * input is still structured, rather than parsed back out of prose.
+   */
+  toolName?: string;
+  /** Path this tool wrote, for the file-producing tools only. */
+  filePath?: string;
+  /**
+   * Files a shell command redirects stdout into.
+   *
+   * Separate from `filePath` because it is *inferred* from a command string
+   * rather than read from a structured input, and one command can write
+   * several files. Relative targets are stored as written and resolved later,
+   * where the working directory is known.
+   */
+  redirectPaths?: string[];
 };
 
 // Tool result message for tool result display
@@ -76,6 +95,14 @@ export type ToolResultMessage = {
   summary: string;
   timestamp: number;
   toolUseResult?: unknown; // Contains structured data like structuredPatch, stdout, stderr etc.
+  /**
+   * Path the originating tool acted on, when it named one.
+   *
+   * Taken from the cached tool_use input, which is the only place it exists —
+   * the result itself carries content, not the file it came from. Used to pick
+   * a syntax-highlighting language for the result body.
+   */
+  filePath?: string;
 };
 
 // Plan approval dialog state
@@ -258,6 +285,15 @@ export type {
   ProjectPathResponse,
   SlashCommandInfo,
   SlashCommandsResponse,
+  ConversationSummary,
+  HistoryListResponse,
+  RenameConversationRequest,
+  DeleteConversationsResponse,
+  AttachmentInfo,
+  UploadAttachmentsResponse,
+  ModelOption,
+  EffortLevel,
+  ThinkingMode,
 } from "../../shared/types";
 
 // Re-export SDK types

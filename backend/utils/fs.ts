@@ -61,6 +61,35 @@ export async function writeTextFile(
 }
 
 /**
+ * Write binary content to a file.
+ *
+ * Uploaded attachments are arbitrary bytes — a PDF or a screenshot is not
+ * valid UTF-8 — so they cannot go through writeTextFile without corruption.
+ */
+export async function writeBinaryFile(
+  path: string,
+  content: Uint8Array,
+): Promise<void> {
+  await fs.writeFile(path, content);
+}
+
+/**
+ * Create a temporary directory that is *not* cleaned up on return.
+ *
+ * Attachments have to outlive the request that uploaded them: the path is
+ * handed to Claude, which reads the file during a later turn. The OS reclaims
+ * the directory on its own schedule.
+ */
+export async function makeTempDir(prefix: string): Promise<string> {
+  return await fs.mkdtemp(join(tmpdir(), prefix));
+}
+
+/** Root the attachment directories are created under, for path confinement. */
+export function getTempRoot(): string {
+  return tmpdir();
+}
+
+/**
  * Check if file or directory exists
  */
 export async function exists(path: string): Promise<boolean> {
