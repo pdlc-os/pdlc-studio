@@ -29,6 +29,22 @@ interface ModelSelectorProps {
  * All three are omitted from the request unless set, so the CLI's own
  * configured defaults stand when the user has not chosen.
  */
+/**
+ * "Opus 5 with 1M context · Best for everyday tasks" -> "Opus 5".
+ *
+ * The first segment names the model and its version; everything after the
+ * separator is marketing copy, and the "with … context" clause is a capability
+ * rather than an identity. Returns undefined when the shape is not recognised,
+ * so the caller can fall back rather than render an empty label.
+ */
+function modelNameFrom(description: string): string | undefined {
+  const head = description.split("·")[0]?.trim();
+  if (!head) return undefined;
+
+  const name = head.replace(/\s+with\s+.*$/i, "").trim();
+  return name === "" ? undefined : name;
+}
+
 export function ModelSelector({
   models,
   model,
@@ -72,29 +88,17 @@ export function ModelSelector({
   }, [models]);
 
   /*
-   * The default entry is shown as the model it resolves to, not as "Default
-   * (recommended)".
+   * Labels come from the description, not from `displayName`.
    *
-   * That label said nothing about what would actually answer, and appending
-   * the real name to it made the trigger wide enough to crowd the composer.
-   * Substituting is both shorter and more informative. Resolved by matching
-   * descriptions, since the payload carries no field naming the default.
+   * The CLI's display names are inconsistent and say the wrong things: one is
+   * "Default (recommended)", which names no model at all, and another is
+   * "Opus (1M context)", which spends its width on a context size rather than
+   * a version. The description opens with exactly what is wanted —
+   * "Opus 5 with 1M context", "Haiku 4.5" — so the model and its version are
+   * taken from there.
    */
-  const labelFor = useMemo(() => {
-    const named = new Map<string, string>();
-    for (const option of models) {
-      const identity = option.description.trim().toLowerCase();
-      // A concrete entry names the model; the default entry does not.
-      if (identity && !named.has(identity) && option.value !== "default") {
-        named.set(identity, option.displayName);
-      }
-    }
-
-    return (option: ModelOption) => {
-      const resolved = named.get(option.description.trim().toLowerCase());
-      return resolved ?? option.displayName;
-    };
-  }, [models]);
+  const labelFor = (option: ModelOption) =>
+    modelNameFrom(option.description) ?? option.displayName;
 
   const triggerLabel = selected ? labelFor(selected) : "Model";
 
