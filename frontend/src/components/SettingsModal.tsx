@@ -38,6 +38,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             label="Close settings"
             variant="ghost"
             icon={<Icon icon="close" />}
+            tooltip="Close settings"
           />
         </HStack>
         {/*

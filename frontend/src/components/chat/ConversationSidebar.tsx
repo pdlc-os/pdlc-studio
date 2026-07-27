@@ -228,6 +228,7 @@ export function ConversationSidebar({
             size="sm"
             isDisabled={isLoading}
             icon={<Icon icon={RefreshCw} />}
+            tooltip="Refresh conversations"
           />
         </HStack>
       </div>

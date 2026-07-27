@@ -45,7 +45,11 @@ import { ExportMenu } from "./chat/ExportMenu";
 import { saveTranscript } from "../utils/saveTranscript";
 import type { ExportFormat } from "../utils/exportTranscript";
 import { collectConversationFiles } from "../utils/conversationFiles";
-import type { ConversationSummary, SDKStatus } from "../types";
+import type {
+  ConversationSummary,
+  PendingQuestionPayload,
+  SDKStatus,
+} from "../types";
 import { usageFromTokens, type ContextUsage } from "../utils/contextUsage";
 import { SlashCommandsProvider } from "../contexts/SlashCommandsContext";
 import { SettingsButton } from "./SettingsButton";
@@ -53,7 +57,11 @@ import { SettingsModal } from "./SettingsModal";
 import { ChatInput } from "./chat/ChatInput";
 import { ChatMessages } from "./chat/ChatMessages";
 import { AppIcon } from "./AppIcon";
-import { getChatUrl, getProjectsUrl } from "../config/api";
+import {
+  getChatUrl,
+  getProjectsUrl,
+  getQuestionAnswerUrl,
+} from "../config/api";
 import { KEYBOARD_SHORTCUTS } from "../utils/constants";
 import type { StreamingContext } from "../hooks/streaming/useMessageProcessor";
 
@@ -120,6 +128,15 @@ export function ChatPage() {
   // result, status while a turn is in flight.
   const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
   const [cliStatus, setCliStatus] = useState<SDKStatus>(null);
+  /*
+   * Questions Claude is blocked on. Answered ones are kept, not removed: the
+   * card is a record of a decision the conversation turned on, and the
+   * transcript would otherwise lose it.
+   */
+  const [questions, setQuestions] = useState<PendingQuestionPayload[]>([]);
+  const [questionAnswers, setQuestionAnswers] = useState<
+    Record<string, Record<string, string>>
+  >({});
 
   /*
    * The agents and workflows this conversation has spawned.
@@ -211,6 +228,26 @@ export function ChatPage() {
 
   // The agent team behind this conversation, if it spawned one.
   const sessionTeam = useSessionTeam(getEncodedName(), activeSessionKey);
+
+  const answerQuestion = useCallback(
+    (questionId: string, answers: Record<string, string>) => {
+      // Recorded locally first: the card freezes on the user's click rather
+      // than after a round trip, and the turn resumes either way.
+      setQuestionAnswers((current) => ({ ...current, [questionId]: answers }));
+      void fetch(getQuestionAnswerUrl(questionId), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers }),
+      }).catch((error: unknown) => {
+        console.error("Failed to send answer", error);
+      });
+    },
+    [],
+  );
+
+  const unansweredQuestion = questions.find(
+    (question) => !questionAnswers[question.questionId],
+  );
 
   /*
    * Agents still working. Drives two indicators that must agree: the island's
@@ -327,6 +364,12 @@ export function ChatPage() {
             ),
           onStatusChange: setCliStatus,
           onAgentEvent: dispatchAgentEvent,
+          onAskQuestion: (question) =>
+            setQuestions((current) =>
+              current.some((q) => q.questionId === question.questionId)
+                ? current
+                : [...current, question],
+            ),
           shouldShowInitMessage: () => !hasShownInitMessage,
           onInitMessageShown: () => setHasShownInitMessage(true),
           get hasReceivedInit() {
@@ -712,6 +755,7 @@ export function ChatPage() {
               className="app-mark-button"
               onClick={handleBackToProjects}
               aria-label="PDLC Studio home"
+              title="PDLC Studio home"
             >
               <AppIcon size={40} variant="mark" />
             </button>
@@ -880,6 +924,11 @@ export function ChatPage() {
                               aria-pressed={
                                 activeConversation.isStarred === true
                               }
+                              tooltip={
+                                activeConversation.isStarred
+                                  ? "Remove star"
+                                  : "Star conversation"
+                              }
                               icon={
                                 <Icon
                                   icon={Star}
@@ -968,28 +1017,52 @@ export function ChatPage() {
                       />
                     }
                     composer={
-                      <ChatInput
-                        input={input}
-                        isLoading={isLoading}
-                        currentRequestId={currentRequestId}
-                        onInputChange={setInput}
-                        onSubmit={() => sendMessage()}
-                        onAbort={handleAbort}
-                        permissionMode={permissionMode}
-                        onPermissionModeChange={setPermissionMode}
-                        showPermissions={isPermissionMode}
-                        permissionData={permissionData}
-                        planPermissionData={planPermissionData}
-                        attachments={attachments}
-                        attachmentError={attachmentError}
-                        isUploadingAttachments={isUploadingAttachments}
-                        onAttachFiles={(files) => void addAttachments(files)}
-                        onRemoveAttachment={removeAttachment}
-                        contextUsage={contextUsage}
-                        cliStatus={cliStatus}
-                        runningAgents={runningAgentCount}
-                        onShowAgents={() => handleTabChange("agents")}
-                      />
+                      <>
+                        {/*
+                         * A long transcript can scroll a pending question out
+                         * of view, and the turn cannot proceed until it is
+                         * answered — so say so where the user is looking,
+                         * beside the input they cannot use yet.
+                         */}
+                        {unansweredQuestion ? (
+                          <button
+                            type="button"
+                            className="ask-pinned"
+                            data-testid="ask-pinned"
+                            onClick={() =>
+                              document
+                                .querySelector(
+                                  '[data-testid="ask-user-question"]',
+                                )
+                                ?.scrollIntoView({ block: "center" })
+                            }
+                          >
+                            Claude is waiting on your answer — show the question
+                          </button>
+                        ) : null}
+                        <ChatInput
+                          input={input}
+                          isLoading={isLoading}
+                          currentRequestId={currentRequestId}
+                          onInputChange={setInput}
+                          onSubmit={() => sendMessage()}
+                          onAbort={handleAbort}
+                          permissionMode={permissionMode}
+                          onPermissionModeChange={setPermissionMode}
+                          showPermissions={isPermissionMode}
+                          permissionData={permissionData}
+                          planPermissionData={planPermissionData}
+                          attachments={attachments}
+                          attachmentError={attachmentError}
+                          isUploadingAttachments={isUploadingAttachments}
+                          onAttachFiles={(files) => void addAttachments(files)}
+                          onRemoveAttachment={removeAttachment}
+                          contextUsage={contextUsage}
+                          cliStatus={cliStatus}
+                          runningAgents={runningAgentCount}
+                          onShowAgents={() => handleTabChange("agents")}
+                        />
+                      </>
                     }
                   >
                     {messages.length > 0 || isLoading ? (
@@ -1007,6 +1080,8 @@ export function ChatPage() {
                         <ChatMessages
                           messages={messages}
                           isLoading={isLoading}
+                          answeredQuestions={questionAnswers}
+                          onAnswerQuestion={answerQuestion}
                         />
                       </div>
                     ) : null}

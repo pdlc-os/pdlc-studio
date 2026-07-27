@@ -13,6 +13,7 @@ export function SettingsButton({ onClick }: SettingsButtonProps) {
       label="Open settings"
       variant="secondary"
       icon={<Icon icon={Settings} />}
+      tooltip="Open settings"
     />
   );
 }

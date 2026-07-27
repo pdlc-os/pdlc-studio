@@ -22,11 +22,18 @@ const USAGE: ContextUsage = {
 };
 
 describe("ContextIsland", () => {
-  it("shows nothing before a turn has reported usage", () => {
-    // A fresh conversation has measured nothing, and rendering 0% would be a
-    // claim rather than a reading.
+  it("holds its slot before any turn has reported usage", () => {
+    /*
+     * It used to render nothing, which made the control look missing on a new
+     * session. It now shows an idle state — and still refuses to invent a 0%,
+     * because nothing has measured the window yet.
+     */
     renderIsland(null, null);
-    expect(screen.queryByTestId("context-island")).toBeNull();
+
+    const island = screen.getByTestId("context-island");
+    expect(island).toHaveAttribute("data-state", "idle");
+    expect(island).toHaveTextContent("—");
+    expect(island).not.toHaveTextContent("0%");
   });
 
   it("shows the context percentage", () => {

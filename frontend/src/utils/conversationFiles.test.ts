@@ -118,7 +118,7 @@ describe("collectConversationFiles with shell redirections", () => {
     // No structured path exists for these — without the inference they were
     // simply missing from the tab.
     const files = collectConversationFiles(
-      [toolMessage("Bash", undefined, 100, ["/tmp/out.txt"])],
+      [toolMessage("Bash", undefined, 100, ["/Users/dev/project/out.txt"])],
       "/proj",
     );
 
@@ -155,5 +155,40 @@ describe("collectConversationFiles with shell redirections", () => {
 
     expect(files).toHaveLength(1);
     expect(files[0].timestamp).toBe(100);
+  });
+});
+
+describe("scratch files", () => {
+  /*
+   * Anything under /tmp is scratch the OS reclaims, so listing it as
+   * "Generated" invites opening a file that may already be gone. /var is
+   * deliberately still listed — that is where kept artifacts land, and where
+   * the attachment temp root lives.
+   */
+  it("omits files written under /tmp", () => {
+    const files = collectConversationFiles(
+      [toolMessage("Write", "/tmp/scratch.md", 100)],
+      undefined,
+    );
+
+    expect(files.filter((f) => f.origin === "generated")).toEqual([]);
+  });
+
+  it("omits /tmp redirect targets too", () => {
+    const files = collectConversationFiles(
+      [toolMessage("Bash", undefined, 100, ["/private/tmp/out.txt"])],
+      undefined,
+    );
+
+    expect(files.filter((f) => f.origin === "generated")).toEqual([]);
+  });
+
+  it("still lists artifacts under /var", () => {
+    const files = collectConversationFiles(
+      [toolMessage("Write", "/var/folders/zz/T/report.md", 100)],
+      undefined,
+    );
+
+    expect(files.map((f) => f.name)).toContain("report.md");
   });
 });

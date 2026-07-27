@@ -8,7 +8,10 @@ import type {
   TimestampedSDKMessage,
 } from "../types";
 import { readContextUsage, type ContextUsage } from "./contextUsage";
-import { readLocalCommandTurn } from "./localCommandTurns";
+import {
+  isCompactionResumePrompt,
+  readLocalCommandTurn,
+} from "./localCommandTurns";
 import type { AgentEvent } from "./agentActivity";
 import { AGENT_TASK_SUBTYPES, toAgentEvent } from "./agentEvents";
 import {
@@ -16,7 +19,6 @@ import {
   convertResultMessage,
   createToolMessage,
   createToolResultMessage,
-  createThinkingMessage,
   createTodoMessageFromInput,
 } from "./messageConversion";
 import { isThinkingContentItem } from "./messageTypes";
@@ -493,15 +495,13 @@ export class UnifiedMessageProcessor {
         } else if (item.type === "tool_use") {
           this.handleToolUse(item, localContext, options);
         } else if (isThinkingContentItem(item)) {
-          const thinkingMessage = createThinkingMessage(
-            item.thinking,
-            timestamp,
-          );
-          if (options.isStreaming) {
-            context.addMessage(thinkingMessage);
-          } else {
-            thinkingMessages.push(thinkingMessage);
-          }
+          /*
+           * Reasoning is dropped rather than rendered.
+           *
+           * The "Claude's Reasoning" block restated in prose what the answer
+           * beneath it already says, and pushed the answer itself below the
+           * fold on every turn.
+           */
         }
       }
     }
@@ -542,8 +542,15 @@ export class UnifiedMessageProcessor {
     options: ProcessingOptions,
   ): void {
     const timestamp = options.timestamp || Date.now();
-    const resultMessage = convertResultMessage(message, timestamp);
-    context.addMessage(resultMessage);
+    /*
+     * The "Result success" banner is not shown.
+     *
+     * It restates that a turn ended, which the transcript already makes
+     * obvious, and its numbers now live in the context island. The *side
+     * effects* below still run — they are what refresh the island and clear
+     * the status — so this is a display decision only.
+     */
+    void convertResultMessage(message, timestamp);
 
     // The result is where per-model token usage lands, so it is the only point
     // the context-window figure can be refreshed from.
@@ -638,6 +645,10 @@ export class UnifiedMessageProcessor {
     timestamp: number,
     context: ProcessingContext,
   ): void {
+    // The flag is checked on the message itself; this catches the same prompt
+    // arriving over the live stream, where the flag is not carried.
+    if (isCompactionResumePrompt(text)) return;
+
     const turn = readLocalCommandTurn(text);
 
     // Guidance for the model, and acknowledgements of something the

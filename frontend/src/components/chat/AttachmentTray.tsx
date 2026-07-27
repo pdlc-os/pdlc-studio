@@ -53,6 +53,7 @@ export function AttachmentTray({
             variant="ghost"
             size="sm"
             icon={<Icon icon={X} />}
+            tooltip={`Remove ${attachment.name}`}
           />
         </span>
       ))}

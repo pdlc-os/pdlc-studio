@@ -17,6 +17,7 @@ import { KEYBOARD_SHORTCUTS } from "../../utils/constants";
 import { useEnterBehavior } from "../../hooks/useSettings";
 import { useSlashCommandsContext } from "../../hooks/useSlashCommandsContext";
 import { useAutoResizeTextarea } from "../../hooks/useAutoResizeTextarea";
+import { insertNewline, isNewlineChord } from "../../utils/listContinuation";
 import {
   filterCommands,
   getSlashQuery,
@@ -444,6 +445,19 @@ export function ChatInput({
     }
 
     if (e.key === KEYBOARD_SHORTCUTS.SUBMIT && !isComposing) {
+      /*
+       * Alt/Opt, Ctrl and Cmd always mean "next line", whichever way Enter is
+       * configured — no mode binds them, so there is nothing to override.
+       * Shift is deliberately not in that set: under `enterBehavior:
+       * "newline"` it is the user's configured *send*, and quietly
+       * reassigning a setting is worse than offering one chord fewer.
+       */
+      if (isNewlineChord(e)) {
+        e.preventDefault();
+        insertLineBreak();
+        return;
+      }
+
       if (enterBehavior === "newline") {
         handleNewlineModeKeyDown(e);
       } else {
@@ -452,26 +466,50 @@ export function ChatInput({
     }
   };
 
+  /**
+   * Inserts a newline, carrying the list marker when the caret is in a list.
+   *
+   * Routed through the same pendingCaret latch the mention picker uses: the
+   * caret has to be placed after React has committed the new value, or it
+   * lands on the old text and is then reset.
+   */
+  const insertLineBreak = () => {
+    const element = inputRef.current;
+    const at = element?.selectionStart ?? input.length;
+    const next = insertNewline(input, at);
+
+    pendingCaret.current = next.caret;
+    onInputChange(next.value);
+  };
+
   const handleNewlineModeKeyDown = (
     e: React.KeyboardEvent<HTMLTextAreaElement>,
   ) => {
-    // Newline mode: Enter adds newline, Shift+Enter sends
+    // Newline mode: Enter adds newline, Shift+Enter sends.
     if (e.shiftKey) {
       e.preventDefault();
       onSubmit();
+      return;
     }
-    // Enter is handled naturally by textarea (adds newline)
+
+    // Handled here rather than left to the textarea, so the newline carries
+    // the list marker.
+    e.preventDefault();
+    insertLineBreak();
   };
 
   const handleSendModeKeyDown = (
     e: React.KeyboardEvent<HTMLTextAreaElement>,
   ) => {
-    // Send mode: Enter sends, Shift+Enter adds newline
+    // Send mode: Enter sends, Shift+Enter adds newline.
     if (!e.shiftKey) {
       e.preventDefault();
       onSubmit();
+      return;
     }
-    // Shift+Enter is handled naturally by textarea (adds newline)
+
+    e.preventDefault();
+    insertLineBreak();
   };
 
   const handleCompositionStart = () => {
@@ -693,6 +731,7 @@ export function ChatInput({
                 onPermissionModeChange(getNextPermissionMode(permissionMode))
               }
               data-testid="permission-mode-toggle"
+              data-mode={permissionMode}
               label={getPermissionModeIndicator(permissionMode)}
               aria-label={`${getPermissionModeIndicator(permissionMode)} — ${getPermissionModeName(permissionMode)}. Click to cycle (Ctrl+Shift+M)`}
             />
@@ -705,6 +744,7 @@ export function ChatInput({
                 isDisabled={isLoading || isUploadingAttachments}
                 data-testid="attach-files"
                 icon={<Icon icon={Paperclip} />}
+                tooltip="Attach files"
               />
             ) : null}
           </>

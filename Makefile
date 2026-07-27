@@ -1,6 +1,6 @@
 # PDLC Studio - Development Tasks
 
-.PHONY: format format-check lint typecheck test build dev clean install install-frontend install-backend sync-brand
+.PHONY: format format-check lint typecheck test build dev dev-debug dev-backend-debug clean install install-frontend install-backend sync-brand
 
 # Formatting
 format: format-frontend format-backend
@@ -51,10 +51,58 @@ build-backend:
 	cd backend && deno task build
 
 # Development
+# Both servers in one terminal, backend first.
+#
+# The frontend is started only once the backend answers. Vite comes up happily
+# without it — `GET /` returns 200 — but every proxied /api call returns 500
+# until the backend is listening, so loading the app in that window shows a
+# broken page that only a refresh fixes.
+#
+# `trap 'kill 0'` kills the process group on exit, so Ctrl-C stops both.
+# Without it, interrupting make leaves the children holding :8080 and :3000,
+# after which the next run dies with EADDRINUSE while a stale server quietly
+# keeps serving old code.
+#
+# The wait is bounded. An unbounded `until` here would hang forever whenever
+# the backend fails to start, which is exactly when you want to see its output.
+DEV_BACKEND_TASK ?= dev
+DEV_PORT ?= 8080
+DEV_WAIT ?= 60
+
+dev:
+	@trap 'kill 0' EXIT INT TERM; \
+	( cd backend && deno task $(DEV_BACKEND_TASK) ) & \
+	printf 'waiting for backend on :$(DEV_PORT)'; \
+	for i in $$(seq 1 $(DEV_WAIT)); do \
+	  if curl -sf -o /dev/null http://127.0.0.1:$(DEV_PORT)/api/projects; then \
+	    ready=1; break; \
+	  fi; \
+	  printf '.'; sleep 1; \
+	done; \
+	echo; \
+	if [ -z "$$ready" ]; then \
+	  echo "backend did not answer in $(DEV_WAIT)s — starting frontend anyway; see its output above"; \
+	else \
+	  echo "backend  -> http://localhost:$(DEV_PORT)"; \
+	fi; \
+	echo "frontend -> http://localhost:3000"; \
+	echo "Ctrl-C stops both."; \
+	( cd frontend && npm run dev ) & \
+	wait
+
+# Same, with per-message SDK payload logging on the backend.
+dev-debug:
+	@$(MAKE) dev DEV_BACKEND_TASK=dev:debug
+
 dev-frontend:
 	cd frontend && npm run dev
 dev-backend:
 	cd backend && deno task dev
+
+# Same, with per-message SDK payload logging. Off by default: every turn logs
+# the full JSON of every message, which buries anything worth reading.
+dev-backend-debug:
+	cd backend && deno task dev:debug
 
 # Quality checks (run before commit)
 check: format-check lint typecheck test build-frontend

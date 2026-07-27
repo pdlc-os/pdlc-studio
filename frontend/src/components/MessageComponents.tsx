@@ -28,6 +28,7 @@ import type {
 import { TimestampComponent } from "./TimestampComponent";
 import { CollapsibleDetails } from "./messages/CollapsibleDetails";
 import { CommandText } from "./chat/CommandText";
+import { CopyMessageButton } from "./chat/CopyMessageButton";
 import { MESSAGE_CONSTANTS } from "../utils/constants";
 import {
   createEditResult,
@@ -64,6 +65,12 @@ export function ChatMessageComponent({ message }: ChatMessageComponentProps) {
       metadata={
         <ChatMessageMetadata
           timestamp={<TimestampComponent timestamp={message.timestamp} />}
+          footer={
+            <CopyMessageButton
+              text={message.content}
+              label={isUser ? "your message" : "Claude's reply"}
+            />
+          }
         />
       }
     >
@@ -142,12 +149,37 @@ export function SystemMessageComponent({
 
 interface ToolMessageComponentProps {
   message: ToolMessage;
+  /** True when this is the last message and a turn is still running. */
+  isLatest?: boolean;
+  isStreaming?: boolean;
 }
 
-export function ToolMessageComponent({ message }: ToolMessageComponentProps) {
+export function ToolMessageComponent({
+  message,
+  isLatest = false,
+  isStreaming = false,
+}: ToolMessageComponentProps) {
   return (
     <ChatMessage sender="assistant">
-      <ChatToolCalls calls={[{ name: message.content, status: "running" }]} />
+      <ChatToolCalls
+        calls={[
+          {
+            name: message.content,
+            /*
+             * Every tool call used to be hardcoded "running", so each one span
+             * a spinner forever — most obviously on AskUserQuestion, which
+             * sits waiting for a person.
+             *
+             * ToolMessage carries no tool_use id, so a call cannot be matched
+             * to its result directly. Being the last thing in the transcript
+             * with a turn still in flight is the honest approximation: once
+             * anything follows it, the call is no longer what we are waiting
+             * on.
+             */
+            status: isLatest && isStreaming ? "running" : "complete",
+          },
+        ]}
+      />
     </ChatMessage>
   );
 }
@@ -239,6 +271,7 @@ export function PlanMessageComponent({ message }: PlanMessageComponentProps) {
       metadata={
         <ChatMessageMetadata
           timestamp={<TimestampComponent timestamp={message.timestamp} />}
+          footer={<CopyMessageButton text={message.plan} label="this plan" />}
         />
       }
     >
@@ -304,6 +337,19 @@ export function TodoMessageComponent({ message }: TodoMessageComponentProps) {
       metadata={
         <ChatMessageMetadata
           timestamp={<TimestampComponent timestamp={message.timestamp} />}
+          footer={
+            <CopyMessageButton
+              // As a markdown checklist, which is what it is — pasting
+              // "in_progress" into a document helps nobody.
+              text={message.todos
+                .map(
+                  (todo) =>
+                    `- [${todo.status === "completed" ? "x" : " "}] ${todo.content}`,
+                )
+                .join("\n")}
+              label="these todos"
+            />
+          }
         />
       }
     >

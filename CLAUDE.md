@@ -946,6 +946,32 @@ rather than putting an error in the transcript — which would be worse than the
 kill path it replaced. The mark is set _before_ awaiting the interrupt, since
 the turn can raise that error the moment it lands.
 
+### Newline chords and list continuation
+
+Alt/Opt, Ctrl or Cmd with Enter always inserts a newline, whichever way
+`enterBehavior` is set — no mode binds those, so there is nothing to override.
+
+**Shift is deliberately not in that set.** Under `enterBehavior: "newline"`
+Shift+Enter is the user's configured _send_, and quietly reassigning a setting
+is worse than offering one chord fewer. In the default "send" mode Shift+Enter
+already inserts a newline, so nothing is missing there.
+
+Every newline-producing path routes through `insertNewline`
+(`utils/listContinuation.ts`), so a line break carries the list marker: `- foo`
+opens the next line with `- `, `1. foo` with `2. `, indentation is preserved,
+and the marker the user typed is echoed rather than normalised (`*` stays `*`,
+`1)` stays `1)`). A newline on an _empty_ item removes the marker instead,
+which is how every markdown editor ends a list — without it there is no way to
+stop without deleting the marker by hand.
+
+There is no rich text here. The buffer stays plain markdown, which is what
+reaches Claude; "turning into a list" only ever means the next marker is
+inserted for you.
+
+The caret goes through the same `pendingCaret` layout effect the `@` picker
+uses. A `requestAnimationFrame` can run before React commits the new value, in
+which case the caret lands on the old text and is then reset.
+
 ## Conversation Typography
 
 The message transcript has its own typeface and text scale, chosen in Settings →
@@ -1132,7 +1158,17 @@ optional dependencies, but this app keeps passing its own detected
 
 ### Individual Commands
 
-- Development: `make dev-backend` / `make dev-frontend`
+- Development: `make dev` runs both servers in one terminal, **backend first**.
+  Vite starts happily without the backend — `GET /` returns 200 — but every
+  proxied `/api` call returns 500 until the backend is listening, so loading
+  the app in that window shows a broken page that only a refresh fixes. The
+  wait is bounded (`DEV_WAIT`, default 60s) and starts the frontend anyway on
+  timeout, so a backend that fails to boot still shows you its output.
+  `DEV_PORT` follows a non-default `PORT`. `make dev-backend` /
+  `make dev-frontend` still run them separately
+- `make dev-debug` is the same with per-message SDK payload logging on the
+  backend, which is off by default because it logs the full JSON of every
+  message and buries anything worth reading
 - Testing: `make test-frontend` / `make test-backend`
 - Build: `make build-backend` / `make build-frontend`
 

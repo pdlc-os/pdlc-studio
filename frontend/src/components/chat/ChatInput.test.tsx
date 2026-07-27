@@ -556,3 +556,112 @@ describe("file mention picker", () => {
     });
   });
 });
+
+describe("newline chords and list continuation", () => {
+  function Harness2() {
+    const [input, setInput] = useState("");
+    return (
+      <MemoryRouter>
+        <SettingsProvider>
+          <AstryxProvider>
+            <SlashCommandsProvider workingDirectory="/tmp/project">
+              <ChatInput
+                input={input}
+                isLoading={false}
+                currentRequestId={null}
+                onInputChange={setInput}
+                onSubmit={vi.fn()}
+                onAbort={vi.fn()}
+                permissionMode="default"
+                onPermissionModeChange={vi.fn()}
+              />
+            </SlashCommandsProvider>
+          </AstryxProvider>
+        </SettingsProvider>
+      </MemoryRouter>
+    );
+  }
+
+  async function typeInto(value: string) {
+    render(<Harness2 />);
+    await act(async () => {});
+    const textarea = screen.getByRole("combobox", {
+      name: "Message",
+    }) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value } });
+    return textarea;
+  }
+
+  it.each([
+    ["altKey", { altKey: true }],
+    ["ctrlKey", { ctrlKey: true }],
+    ["metaKey", { metaKey: true }],
+  ])("%s + Enter inserts a newline instead of sending", async (_name, mods) => {
+    const textarea = await typeInto("hello");
+    fireEvent.keyDown(textarea, { key: "Enter", ...mods });
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("hello\n");
+    });
+  });
+
+  it("carries the bullet onto the next line", async () => {
+    const textarea = await typeInto("- first");
+    fireEvent.keyDown(textarea, { key: "Enter", altKey: true });
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("- first\n- ");
+    });
+  });
+
+  it("increments a numbered list", async () => {
+    const textarea = await typeInto("1. first");
+    fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("1. first\n2. ");
+    });
+  });
+
+  it("ends the list on an empty item", async () => {
+    const textarea = await typeInto("- first\n- ");
+    fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("- first\n");
+    });
+  });
+
+  it("still sends on a bare Enter", async () => {
+    // The chords add a way to break the line; they must not take away the
+    // way to send.
+    const onSubmit = vi.fn();
+    render(
+      <MemoryRouter>
+        <SettingsProvider>
+          <AstryxProvider>
+            <SlashCommandsProvider workingDirectory="/tmp/project">
+              <ChatInput
+                input="hello"
+                isLoading={false}
+                currentRequestId={null}
+                onInputChange={vi.fn()}
+                onSubmit={onSubmit}
+                onAbort={vi.fn()}
+                permissionMode="default"
+                onPermissionModeChange={vi.fn()}
+              />
+            </SlashCommandsProvider>
+          </AstryxProvider>
+        </SettingsProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {});
+
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Message" }), {
+      key: "Enter",
+    });
+
+    expect(onSubmit).toHaveBeenCalled();
+  });
+});

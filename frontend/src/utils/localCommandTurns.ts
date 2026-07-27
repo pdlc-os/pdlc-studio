@@ -67,3 +67,22 @@ export function readLocalCommandTurn(content: string): LocalCommandTurn | null {
 
   return null;
 }
+
+/**
+ * The prompt the CLI feeds back after compacting.
+ *
+ * `isCompactSummary` is the proper signal and is checked first, but it is
+ * carried on the session-file entry and is not reliably present on the live
+ * stream — a compaction watched in the browser still put the wall of text in
+ * the transcript. So the opening line is matched too.
+ *
+ * Anchored to the start, and to a sentence the CLI generates verbatim, so a
+ * user quoting it mid-message is unaffected. The cost of a miss is thousands
+ * of words attributed to someone who never typed them.
+ */
+const RESUME_PREAMBLE =
+  /^\s*This session is being continued from a previous conversation/;
+
+export function isCompactionResumePrompt(content: string): boolean {
+  return RESUME_PREAMBLE.test(content);
+}

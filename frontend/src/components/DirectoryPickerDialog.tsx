@@ -106,6 +106,7 @@ export function DirectoryPickerDialog({
             label="Close"
             variant="ghost"
             icon={<Icon icon="close" />}
+            tooltip="Close"
           />
         </HStack>
 
@@ -118,6 +119,7 @@ export function DirectoryPickerDialog({
             variant="secondary"
             icon={<Icon icon={ArrowUp} />}
             isDisabled={!listing?.parent || loading}
+            tooltip="Go to parent directory"
           />
           <Text type="code" size="sm" data-testid="picker-current-path">
             {currentPath}

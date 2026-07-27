@@ -134,3 +134,7 @@ export const getFileContentUrl = (
   }
   return `${API_CONFIG.ENDPOINTS.FILES}?${params.toString()}`;
 };
+
+/** Where an AskUserQuestion answer is posted; the id comes from the stream. */
+export const getQuestionAnswerUrl = (questionId: string): string =>
+  `/api/questions/${encodeURIComponent(questionId)}`;

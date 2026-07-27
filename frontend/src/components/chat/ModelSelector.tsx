@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Popover } from "@astryxdesign/core/Popover";
 import { Button } from "@astryxdesign/core/Button";
 import { Selector } from "@astryxdesign/core/Selector";
 import { Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import { EFFORT_LEVELS, THINKING_MODES } from "../../utils/modelOptions";
+import { modelLabel } from "../../utils/modelLabel";
 import type { EffortLevel, ModelOption, ThinkingMode } from "../../types";
 
 interface ModelSelectorProps {
@@ -51,7 +52,41 @@ export function ModelSelector({
       )
     : EFFORT_LEVELS;
 
-  const triggerLabel = selected?.displayName ?? "Model";
+  /*
+   * The CLI lists the same model twice.
+   *
+   * `default` and `opus[1m]` arrive as separate options with identical
+   * descriptions — "Default (recommended)" *is* the other entry, so the list
+   * offered two ways to pick one thing. The description names the actual
+   * model, so it identifies them; the first occurrence wins, which is the
+   * default entry.
+   */
+  const uniqueModels = useMemo(() => {
+    const seen = new Set<string>();
+    return models.filter((option) => {
+      /*
+       * Keyed on the rendered label, not the id.
+       *
+       * The CLI lists `default` and `opus[1m]` as separate rows for one
+       * model — two ways to pick the same thing, indistinguishable once
+       * labelled. Whatever a row ends up *called* is the identity that
+       * matters to someone reading the list.
+       */
+      const identity = modelLabel(option).toLowerCase();
+      if (seen.has(identity)) return false;
+      seen.add(identity);
+      return true;
+    });
+  }, [models]);
+
+  /*
+   * Labels come from `modelLabel`, which reads the description first, then
+   * the model id, then falls back to the CLI's own name. The id path is what
+   * keeps a Bedrock-backed CLI reading the same as a first-party one.
+   */
+  const labelFor = modelLabel;
+
+  const triggerLabel = selected ? labelFor(selected) : "Model";
 
   /*
    * Open state is controlled so the content can be mounted only while open.
@@ -72,9 +107,9 @@ export function ModelSelector({
             <VStack gap={1}>
               <Selector
                 label="Model"
-                options={models.map((option) => ({
+                options={uniqueModels.map((option) => ({
                   value: option.value,
-                  label: option.displayName,
+                  label: labelFor(option),
                 }))}
                 value={model}
                 onChange={onModelChange}

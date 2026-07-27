@@ -12,6 +12,19 @@ export interface ConversationFile {
   /** Timestamp of the message it came from, for ordering. */
   timestamp: number;
 }
+/**
+ * Working directories whose contents are not deliverables.
+ *
+ * Anything Claude writes under /tmp is scratch that the OS reclaims, so
+ * listing it as "Generated" invites the user to open a file that may already
+ * be gone. Artifacts it means to keep land under /var — where the attachment
+ * temp root also lives — so /var is deliberately not excluded.
+ */
+const SCRATCH_PREFIXES = ["/tmp/", "/private/tmp/"];
+
+function isScratchPath(path: string): boolean {
+  return SCRATCH_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
 
 /**
  * Matches the block `withAttachments` adds to an outgoing message.
@@ -68,7 +81,7 @@ export function collectConversationFiles(
         record(path, "attached", message.timestamp);
       }
     } else if (isToolMessage(message)) {
-      if (message.filePath) {
+      if (message.filePath && !isScratchPath(message.filePath)) {
         record(message.filePath, "generated", message.timestamp);
       }
       // Inferred from a shell redirection rather than a structured input; the
@@ -77,7 +90,9 @@ export function collectConversationFiles(
         message.redirectPaths ?? [],
         workingDirectory,
       )) {
-        record(path, "generated", message.timestamp);
+        if (!isScratchPath(path)) {
+          record(path, "generated", message.timestamp);
+        }
       }
     }
   }

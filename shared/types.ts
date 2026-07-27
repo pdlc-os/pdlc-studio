@@ -1,7 +1,42 @@
 export interface StreamResponse {
-  type: "claude_json" | "error" | "done" | "aborted";
+  type: "claude_json" | "error" | "done" | "aborted" | "ask_user_question";
   data?: unknown; // SDKMessage object for claude_json type
   error?: string;
+  /** Present on ask_user_question: the question awaiting an answer. */
+  question?: PendingQuestionPayload;
+}
+
+/** One option in an AskUserQuestion card. */
+export interface AskOptionPayload {
+  label: string;
+  description: string;
+  /** Markdown shown in a monospace pane; single-select questions only. */
+  preview?: string;
+}
+
+export interface AskQuestionPayload {
+  question: string;
+  /** Short chip beside the question. */
+  header: string;
+  options: AskOptionPayload[];
+  multiSelect: boolean;
+}
+
+/**
+ * A question Claude is blocked on.
+ *
+ * Carries its own id because the answer arrives on a separate HTTP request:
+ * the suspended tool handler lives in the backend, not in the stream.
+ */
+export interface PendingQuestionPayload {
+  questionId: string;
+  requestId: string;
+  questions: AskQuestionPayload[];
+}
+
+export interface AnswerQuestionRequest {
+  /** Chosen labels (or free text) keyed by question text. */
+  answers: Record<string, string>;
 }
 
 export interface ChatRequest {
