@@ -1164,10 +1164,16 @@ body,
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-2);
-  min-width: 9rem;
+  min-width: 12rem;
   padding: var(--spacing-1) var(--spacing-2);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
+  /* A rounded rectangle rather than a pill, so it reads as the same family of
+     surface as the composer and the side panels.
+     The token has to be picked against this box's height, not by copying the
+     panels' own value: the island is ~25px tall, so the 12px of
+     `--radius-container` — and even the 10px of `--radius-element` — is close
+     enough to half the height that the corners round back into an ellipse. */
+  border-radius: var(--radius-inner);
   background-color: var(--color-background-surface);
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
@@ -1176,7 +1182,9 @@ body,
 
 .context-island-meter {
   position: relative;
-  inline-size: 3rem;
+  /* Grows with the island so the extra length goes into the reading rather
+     than into empty space. The meter stays a pill — it is a bar, not a panel. */
+  inline-size: 4rem;
   block-size: 0.375rem;
   border-radius: var(--radius-full);
   background-color: var(--color-overlay-hover);
