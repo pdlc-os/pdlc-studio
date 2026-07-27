@@ -465,49 +465,58 @@ export function ChatInput({
         // active-mode indicator ("Plan" vs "Send"), which the default icon-only
         // send button cannot convey.
         sendButton={
-          isStopShown ? (
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              onClick={onAbort}
-              label="Stop"
-              aria-label="Stop generating (ESC)"
-            />
-          ) : (
-            <HStack gap={2} vAlign="center">
-              <ContextIsland usage={contextUsage} status={cliStatus} />
-              <ModelSelector
-                models={models}
-                model={model}
-                effortLevel={effortLevel}
-                thinking={thinking}
-                onModelChange={(value) => updateSettings({ model: value })}
-                onEffortChange={(value) =>
-                  updateSettings({ effortLevel: value })
-                }
-                onThinkingChange={(value) =>
-                  updateSettings({ thinking: value })
-                }
-                isDisabled={isLoading}
-              />
+          <HStack gap={2} vAlign="center">
+            {/*
+             * Outside the send/stop swap on purpose. The island reports what is
+             * happening *during* a turn — compaction only ever runs mid-turn —
+             * so putting it in the idle branch made that state unreachable: the
+             * whole group was replaced by Stop for exactly the window the
+             * island had something to say.
+             */}
+            <ContextIsland usage={contextUsage} status={cliStatus} />
+            {isStopShown ? (
               <Button
                 type="button"
-                variant="primary"
+                variant="destructive"
                 size="sm"
-                onClick={onSubmit}
-                isDisabled={!input.trim() || isLoading}
-                data-testid="send-button"
-                label={
-                  isLoading
-                    ? "..."
-                    : permissionMode === "plan"
-                      ? "Plan"
-                      : "Send"
-                }
+                onClick={onAbort}
+                label="Stop"
+                aria-label="Stop generating (ESC)"
               />
-            </HStack>
-          )
+            ) : (
+              <>
+                <ModelSelector
+                  models={models}
+                  model={model}
+                  effortLevel={effortLevel}
+                  thinking={thinking}
+                  onModelChange={(value) => updateSettings({ model: value })}
+                  onEffortChange={(value) =>
+                    updateSettings({ effortLevel: value })
+                  }
+                  onThinkingChange={(value) =>
+                    updateSettings({ thinking: value })
+                  }
+                  isDisabled={isLoading}
+                />
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={onSubmit}
+                  isDisabled={!input.trim() || isLoading}
+                  data-testid="send-button"
+                  label={
+                    isLoading
+                      ? "..."
+                      : permissionMode === "plan"
+                        ? "Plan"
+                        : "Send"
+                  }
+                />
+              </>
+            )}
+          </HStack>
         }
         footerActions={
           <>

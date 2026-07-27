@@ -368,3 +368,69 @@ describe("ChatInput permission mode tag", () => {
     }
   });
 });
+
+/**
+ * The context island is the one control that has to survive the send/stop
+ * swap: compaction only ever runs mid-turn, so an island that lives in the
+ * idle branch is hidden for exactly the window it has something to report.
+ * That is how it originally shipped, and only a live /compact caught it.
+ */
+describe("context island placement", () => {
+  const ISLAND_PROPS = {
+    contextUsage: { percent: 42, usedTokens: 4200, contextWindow: 10000 },
+  } as const;
+
+  function renderComposer(extra: Record<string, unknown>) {
+    return render(
+      <MemoryRouter>
+        <SettingsProvider>
+          <AstryxProvider>
+            <ChatInput
+              input=""
+              isLoading={false}
+              currentRequestId={null}
+              onInputChange={vi.fn()}
+              onSubmit={vi.fn()}
+              onAbort={vi.fn()}
+              permissionMode="default"
+              onPermissionModeChange={vi.fn()}
+              workingDirectory="/tmp/project"
+              {...ISLAND_PROPS}
+              {...extra}
+            />
+          </AstryxProvider>
+        </SettingsProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it("stays visible while a turn is running", async () => {
+    renderComposer({ isLoading: true, currentRequestId: "req-1" });
+    await act(async () => {});
+
+    // Stop has replaced Send, and the island is still there beside it.
+    expect(
+      screen.getByRole("button", { name: /stop generating/i }),
+    ).toBeTruthy();
+    expect(screen.getByTestId("context-island")).toHaveTextContent("42%");
+  });
+
+  it("shows compaction in place of the percentage", async () => {
+    renderComposer({
+      isLoading: true,
+      currentRequestId: "req-1",
+      cliStatus: "compacting",
+    });
+    await act(async () => {});
+
+    const island = screen.getByTestId("context-island");
+    expect(island).toHaveAttribute("data-state", "compacting");
+    expect(island).toHaveTextContent("Compacting");
+  });
+
+  it("is visible when idle too", async () => {
+    renderComposer({});
+    await act(async () => {});
+    expect(screen.getByTestId("context-island")).toHaveTextContent("42%");
+  });
+});
