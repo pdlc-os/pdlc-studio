@@ -43,6 +43,13 @@ export interface ProjectsResponse {
 // Conversation history types
 export interface ConversationSummary {
   sessionId: string;
+  /**
+   * Whether the user has starred this conversation.
+   *
+   * Sent with the listing rather than fetched separately, because the sidebar
+   * has to know which section a row belongs to before it can draw it.
+   */
+  isStarred?: boolean;
   startTime: string;
   lastTime: string;
   messageCount: number;

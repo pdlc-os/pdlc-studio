@@ -21,12 +21,18 @@ export function ExportMenu({ onExport, isDisabled = false }: ExportMenuProps) {
     <DropdownMenu
       button={{
         variant: "ghost",
-        size: "sm",
+        size: "md",
         // `icon` takes an element, not a component reference.
-        icon: <Icon icon={Download} size="sm" />,
-        label: "Export",
+        icon: <Icon icon={Download} size="md" />,
+        // Icon only, so `label` becomes the accessible name rather than
+        // visible text — the download glyph is conventional enough to carry
+        // this on its own, and the menu names every format it can produce.
+        label: "Export transcript",
+        isIconOnly: true,
         isDisabled,
       }}
+      // The trigger is now an icon, so the menu cannot inherit a sensible
+      // width from it.
       menuWidth={220}
       items={[
         {

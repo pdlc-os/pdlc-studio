@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   getHistoriesUrl,
   getSessionUrl,
+  getSessionStarUrl,
   getClearHistoriesUrl,
 } from "../config/api";
 import type { ConversationSummary, HistoryListResponse } from "../types";
@@ -99,6 +100,44 @@ export function useConversationList(
     [encodedProjectName, refresh],
   );
 
+  /**
+   * Stars or unstars a conversation.
+   *
+   * The new state is applied locally before the request settles, because the
+   * star is the feedback for the click — waiting for a round trip and a
+   * refetch makes the icon feel broken. The refresh afterwards reconciles
+   * with the server, and a failure restores what was really there rather than
+   * leaving the optimistic guess on screen.
+   */
+  const setStarred = useCallback(
+    async (sessionId: string, isStarred: boolean) => {
+      if (!encodedProjectName) return;
+
+      setConversations((current) =>
+        current.map((conversation) =>
+          conversation.sessionId === sessionId
+            ? { ...conversation, isStarred }
+            : conversation,
+        ),
+      );
+
+      try {
+        const response = await fetch(
+          getSessionStarUrl(encodedProjectName, sessionId),
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ isStarred }),
+          },
+        );
+        if (!response.ok) throw new Error("Failed to update star");
+      } finally {
+        await refresh();
+      }
+    },
+    [encodedProjectName, refresh],
+  );
+
   const clearAll = useCallback(async () => {
     if (!encodedProjectName) return;
     const response = await fetch(getClearHistoriesUrl(encodedProjectName), {
@@ -117,6 +156,7 @@ export function useConversationList(
     refresh,
     rename,
     remove,
+    setStarred,
     clearAll,
     /** True once the typed term has been applied, for empty-state wording. */
     isSearching: debouncedTerm.trim() !== "",

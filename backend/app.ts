@@ -25,6 +25,7 @@ import { handleCommandsRequest } from "./handlers/commands.ts";
 import {
   handleClearConversationsRequest,
   handleDeleteConversationRequest,
+  handleStarConversationRequest,
   handleRenameConversationRequest,
 } from "./handlers/sessions.ts";
 import {
@@ -57,7 +58,7 @@ export function createApp(
       origin: "*",
       // PATCH and DELETE back the session rename/delete routes; without them
       // the preflight fails and those routes are unreachable cross-origin.
-      allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowHeaders: ["Content-Type"],
     }),
   );
@@ -98,6 +99,10 @@ export function createApp(
 
   app.delete("/api/projects/:encodedProjectName/histories/:sessionId", (c) =>
     handleDeleteConversationRequest(c),
+  );
+
+  app.put("/api/projects/:encodedProjectName/histories/:sessionId/star", (c) =>
+    handleStarConversationRequest(c),
   );
 
   app.delete("/api/projects/:encodedProjectName/histories", (c) =>

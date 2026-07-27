@@ -9,6 +9,9 @@ import { Banner } from "@astryxdesign/core/Banner";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Breadcrumbs, BreadcrumbItem } from "@astryxdesign/core/Breadcrumbs";
 import { ContextMenu } from "@astryxdesign/core/ContextMenu";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { Icon } from "@astryxdesign/core/Icon";
+import { Star } from "lucide-react";
 import {
   SegmentedControl,
   SegmentedControlItem,
@@ -116,6 +119,7 @@ export function ChatPage() {
     refresh: refreshConversations,
     rename: renameConversation,
     remove: removeConversation,
+    setStarred: setConversationStarred,
     clearAll: clearAllConversations,
     isSearching: isSearchingConversations,
   } = useConversationList(getEncodedName(), conversationSearch);
@@ -553,6 +557,18 @@ export function ChatPage() {
       (conversation) => conversation.sessionId === activeSessionKey,
     ) ?? null;
 
+  const handleToggleStar = useCallback(
+    (conversation: ConversationSummary) => {
+      void setConversationStarred(
+        conversation.sessionId,
+        conversation.isStarred !== true,
+      ).catch((error: unknown) => {
+        console.error("Failed to update star", error);
+      });
+    },
+    [setConversationStarred],
+  );
+
   const handleExport = useCallback(
     (format: ExportFormat) => {
       saveTranscript(format, messages, {
@@ -679,17 +695,6 @@ export function ChatPage() {
             </VStack>
           </HStack>
           <HStack gap={3} vAlign="center">
-            {hasActiveConversation ? (
-              <SegmentedControl
-                label="Conversation view"
-                size="sm"
-                value={activeTab}
-                onChange={handleTabChange}
-              >
-                <SegmentedControlItem value="chat" label="Chat" />
-                <SegmentedControlItem value="files" label="Files" />
-              </SegmentedControl>
-            ) : null}
             <SettingsButton onClick={handleSettingsClick} />
           </HStack>
         </HStack>
@@ -729,6 +734,7 @@ export function ChatPage() {
                   void handleDeleteConversation(conversation)
                 }
                 onClose={handleCloseConversation}
+                onToggleStar={handleToggleStar}
                 searchTerm={conversationSearch}
                 onSearchChange={setConversationSearch}
                 isSearching={isSearchingConversations}
@@ -785,6 +791,15 @@ export function ChatPage() {
                     isDisabled={activeConversation === null}
                     items={[
                       {
+                        label:
+                          activeConversation?.isStarred === true
+                            ? "Remove star"
+                            : "Star conversation",
+                        onClick: () =>
+                          activeConversation &&
+                          handleToggleStar(activeConversation),
+                      },
+                      {
                         label: "Rename conversation",
                         onClick: () => setRenameTarget(activeConversation),
                       },
@@ -812,11 +827,54 @@ export function ChatPage() {
                         <span className="conversation-header-title">
                           {activeConversation?.title ?? "Untitled conversation"}
                         </span>
-                        {/* Nothing to write out until the conversation has content. */}
-                        <ExportMenu
-                          onExport={handleExport}
-                          isDisabled={messages.length === 0}
-                        />
+                        <HStack gap={2} vAlign="center">
+                          {/*
+                           * Stars the conversation being read, without having
+                           * to find its row in the sidebar first.
+                           */}
+                          {activeConversation ? (
+                            <IconButton
+                              onClick={() =>
+                                handleToggleStar(activeConversation)
+                              }
+                              label={
+                                activeConversation.isStarred
+                                  ? "Remove star"
+                                  : "Star conversation"
+                              }
+                              variant="ghost"
+                              size="md"
+                              data-testid="header-star"
+                              aria-pressed={
+                                activeConversation.isStarred === true
+                              }
+                              icon={
+                                <Icon
+                                  icon={Star}
+                                  color={
+                                    activeConversation.isStarred
+                                      ? "orange"
+                                      : undefined
+                                  }
+                                />
+                              }
+                            />
+                          ) : null}
+                          <SegmentedControl
+                            label="Conversation view"
+                            size="sm"
+                            value={activeTab}
+                            onChange={handleTabChange}
+                          >
+                            <SegmentedControlItem value="chat" label="Chat" />
+                            <SegmentedControlItem value="files" label="Files" />
+                          </SegmentedControl>
+                          {/* Nothing to write out until the conversation has content. */}
+                          <ExportMenu
+                            onExport={handleExport}
+                            isDisabled={messages.length === 0}
+                          />
+                        </HStack>
                       </div>
                       {/*
                        * In full: a truncated UUID cannot be matched against

@@ -8,6 +8,7 @@ import { validateEncodedProjectName } from "../history/pathUtils.ts";
 import { logger } from "../utils/logger.ts";
 import { readDir } from "../utils/fs.ts";
 import { getHomeDir } from "../utils/os.ts";
+import { setSessionStarred } from "../history/starred.ts";
 
 /**
  * Longest accepted title. Generous — the point is to stop a runaway paste
@@ -170,4 +171,46 @@ export async function handleClearConversationsRequest(c: Context) {
     total: sessionIds.length,
   });
   return c.json<DeleteConversationsResponse>({ deleted });
+}
+
+/**
+ * Handles `PUT /api/projects/:encodedProjectName/histories/:sessionId/star`.
+ *
+ * The body says which way to set it (`{ isStarred: boolean }`) rather than the
+ * route toggling: the client's view of the list can be a few seconds stale, and
+ * a toggle would then flip the star the wrong way. Stating the desired state
+ * makes a repeated or raced call harmless.
+ */
+export async function handleStarConversationRequest(c: Context) {
+  const params = readParams(c);
+  if (!params) {
+    return c.json({ error: "Invalid project name or session id" }, 400);
+  }
+
+  let isStarred: boolean;
+  try {
+    const body = (await c.req.json()) as { isStarred?: unknown };
+    if (typeof body?.isStarred !== "boolean") {
+      return c.json({ error: "isStarred must be a boolean" }, 400);
+    }
+    isStarred = body.isStarred;
+  } catch {
+    return c.json({ error: "Request body must be JSON" }, 400);
+  }
+
+  try {
+    await setSessionStarred(
+      params.encodedProjectName,
+      params.sessionId,
+      isStarred,
+    );
+  } catch (error) {
+    logger.history.error("Failed to star session {sessionId}: {error}", {
+      sessionId: params.sessionId,
+      error,
+    });
+    return c.json({ error: "Failed to update star" }, 500);
+  }
+
+  return c.json({ sessionId: params.sessionId, isStarred });
 }

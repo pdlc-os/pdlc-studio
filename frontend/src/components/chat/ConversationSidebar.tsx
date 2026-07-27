@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { ContextMenu } from "@astryxdesign/core/ContextMenu";
 import { Button } from "@astryxdesign/core/Button";
 import { IconButton } from "@astryxdesign/core/IconButton";
@@ -13,6 +14,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Star,
   Trash2,
   X,
 } from "lucide-react";
@@ -34,6 +36,7 @@ interface ConversationSidebarProps {
   onDelete: (conversation: ConversationSummary) => void;
   /** Closes the open conversation without deleting it. */
   onClose: () => void;
+  onToggleStar: (conversation: ConversationSummary) => void;
   searchTerm: string;
   onSearchChange: (term: string) => void;
   /** True when the list reflects a search rather than the whole project. */
@@ -57,6 +60,109 @@ function conversationLabel(conversation: ConversationSummary): string {
   return preview.split("\n")[0];
 }
 
+interface ConversationRowProps {
+  conversation: ConversationSummary;
+  activeSessionId: string | null;
+  onSelect: (sessionId: string) => void;
+  onRename: (conversation: ConversationSummary) => void;
+  onDelete: (conversation: ConversationSummary) => void;
+  onClose: () => void;
+  onToggleStar: (conversation: ConversationSummary) => void;
+}
+
+/**
+ * One conversation, with every action that operates on it.
+ *
+ * The star is offered three ways — the icon here, the right-click menu, and
+ * the conversation header — because the row you want to star is not always the
+ * one that is open, and the icon is easy to miss on a narrow sidebar.
+ */
+function ConversationRow({
+  conversation,
+  activeSessionId,
+  onSelect,
+  onRename,
+  onDelete,
+  onClose,
+  onToggleStar,
+}: ConversationRowProps) {
+  const isActive = conversation.sessionId === activeSessionId;
+  const isStarred = conversation.isStarred === true;
+  const label = conversationLabel(conversation);
+
+  return (
+    <ContextMenu
+      label={`Actions for ${label}`}
+      items={[
+        {
+          label: isStarred ? "Remove star" : "Star conversation",
+          icon: <Icon icon={Star} />,
+          onClick: () => onToggleStar(conversation),
+        },
+        {
+          label: "Rename",
+          icon: <Icon icon={Pencil} />,
+          onClick: () => onRename(conversation),
+        },
+        {
+          label: "Close",
+          icon: <Icon icon={X} />,
+          // Only meaningful for the conversation actually open.
+          isDisabled: !isActive,
+          onClick: onClose,
+        },
+        { type: "divider" },
+        {
+          label: "Delete",
+          icon: <Icon icon={Trash2} />,
+          onClick: () => onDelete(conversation),
+        },
+      ]}
+    >
+      <li
+        className="conversation-item"
+        data-testid="conversation-item"
+        data-selected={isActive ? "true" : undefined}
+        data-starred={isStarred ? "true" : undefined}
+      >
+        <button
+          type="button"
+          className="conversation-item-button"
+          onClick={() => onSelect(conversation.sessionId)}
+          aria-current={isActive ? "true" : undefined}
+        >
+          <span className="conversation-item-title">{label}</span>
+          <span className="conversation-item-meta">
+            {/* Summaries carry ISO strings; the formatter wants epoch ms. */}
+            <span>
+              {formatRelativeTime(new Date(conversation.lastTime).getTime())}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>{conversation.messageCount}</span>
+          </span>
+        </button>
+        {/*
+         * A sibling of the row button, not a child: a button inside a button
+         * is invalid, and the browser would give the star's clicks to the row.
+         */}
+        <button
+          type="button"
+          className="conversation-item-star"
+          data-testid="conversation-star"
+          aria-pressed={isStarred}
+          title={isStarred ? "Remove star" : "Star conversation"}
+          onClick={() => onToggleStar(conversation)}
+        >
+          <Icon icon={Star} size="sm" />
+          <span className="sr-only">
+            {isStarred ? `Unstar ${label}` : `Star ${label}`}
+          </span>
+        </button>
+      </li>
+    </ContextMenu>
+  );
+}
+
 /**
  * Past conversations for the open project, with the actions that operate on
  * them.
@@ -76,11 +182,24 @@ export function ConversationSidebar({
   onRename,
   onDelete,
   onClose,
+  onToggleStar,
   onClearAll,
   searchTerm,
   onSearchChange,
   isSearching,
 }: ConversationSidebarProps) {
+  const starredHeadingId = useId();
+  const restHeadingId = useId();
+
+  // Partitioned rather than sorted, so a conversation is in exactly one
+  // section and the server's ordering survives within each.
+  const starred = conversations.filter(
+    (conversation) => conversation.isStarred === true,
+  );
+  const rest = conversations.filter(
+    (conversation) => conversation.isStarred !== true,
+  );
+
   return (
     <aside className="conversation-sidebar" aria-label="Conversations">
       <div className="conversation-sidebar-header">
@@ -172,69 +291,70 @@ export function ConversationSidebar({
             </Text>
           </VStack>
         ) : (
-          <ul className="conversation-list">
-            {conversations.map((conversation) => (
-              <ContextMenu
-                key={conversation.sessionId}
-                label={`Actions for ${conversationLabel(conversation)}`}
-                items={[
-                  {
-                    label: "Rename",
-                    icon: <Icon icon={Pencil} />,
-                    onClick: () => onRename(conversation),
-                  },
-                  {
-                    label: "Close",
-                    icon: <Icon icon={X} />,
-                    // Only meaningful for the conversation actually open.
-                    isDisabled: conversation.sessionId !== activeSessionId,
-                    onClick: onClose,
-                  },
-                  { type: "divider" },
-                  {
-                    label: "Delete",
-                    icon: <Icon icon={Trash2} />,
-                    onClick: () => onDelete(conversation),
-                  },
-                ]}
-              >
-                <li
-                  className="conversation-item"
-                  data-testid="conversation-item"
-                  data-selected={
-                    conversation.sessionId === activeSessionId
-                      ? "true"
-                      : undefined
-                  }
+          <>
+            {/*
+             * Starred first, and only when there are any — an empty heading
+             * would be a permanent reminder of a feature the user has not used.
+             * A conversation appears in exactly one section, so the same row is
+             * never on screen twice.
+             */}
+            {starred.length > 0 ? (
+              <section aria-labelledby={starredHeadingId}>
+                <h2
+                  className="conversation-section-heading"
+                  id={starredHeadingId}
                 >
-                  <button
-                    type="button"
-                    className="conversation-item-button"
-                    onClick={() => onSelect(conversation.sessionId)}
-                    aria-current={
-                      conversation.sessionId === activeSessionId
-                        ? "true"
-                        : undefined
-                    }
+                  Starred
+                </h2>
+                <ul className="conversation-list">
+                  {starred.map((conversation) => (
+                    <ConversationRow
+                      key={conversation.sessionId}
+                      conversation={conversation}
+                      activeSessionId={activeSessionId}
+                      onSelect={onSelect}
+                      onRename={onRename}
+                      onDelete={onDelete}
+                      onClose={onClose}
+                      onToggleStar={onToggleStar}
+                    />
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+
+            {rest.length > 0 ? (
+              <section
+                aria-labelledby={starred.length > 0 ? restHeadingId : undefined}
+                aria-label={starred.length > 0 ? undefined : "Conversations"}
+              >
+                {/* Only worth a heading once there is another section to
+                    distinguish it from. */}
+                {starred.length > 0 ? (
+                  <h2
+                    className="conversation-section-heading"
+                    id={restHeadingId}
                   >
-                    <span className="conversation-item-title">
-                      {conversationLabel(conversation)}
-                    </span>
-                    <span className="conversation-item-meta">
-                      {/* Summaries carry ISO strings; the formatter wants epoch ms. */}
-                      <span>
-                        {formatRelativeTime(
-                          new Date(conversation.lastTime).getTime(),
-                        )}
-                      </span>
-                      <span aria-hidden="true">·</span>
-                      <span>{conversation.messageCount}</span>
-                    </span>
-                  </button>
-                </li>
-              </ContextMenu>
-            ))}
-          </ul>
+                    All conversations
+                  </h2>
+                ) : null}
+                <ul className="conversation-list">
+                  {rest.map((conversation) => (
+                    <ConversationRow
+                      key={conversation.sessionId}
+                      conversation={conversation}
+                      activeSessionId={activeSessionId}
+                      onSelect={onSelect}
+                      onRename={onRename}
+                      onDelete={onDelete}
+                      onClose={onClose}
+                      onToggleStar={onToggleStar}
+                    />
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+          </>
         )}
       </div>
 

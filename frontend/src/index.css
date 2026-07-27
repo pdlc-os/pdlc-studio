@@ -884,7 +884,15 @@ body,
   list-style: none;
 }
 
+/*
+ * The row and its star sit side by side. The star cannot be inside the row
+ * button — a button within a button is invalid markup, and the browser routes
+ * the inner one's clicks to the outer.
+ */
 .conversation-item {
+  position: relative;
+  display: flex;
+  align-items: center;
   border-radius: var(--radius-element);
 }
 
@@ -896,7 +904,8 @@ body,
   display: flex;
   flex-direction: column;
   gap: var(--spacing-0-5);
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: var(--spacing-2) var(--spacing-3);
   border: none;
   border-radius: inherit;
@@ -914,6 +923,90 @@ body,
 .conversation-item-button:focus-visible {
   outline: 2px solid var(--color-border-emphasized);
   outline-offset: -2px;
+}
+
+/*
+ * Visible on hover, on keyboard focus, and permanently once starred — an
+ * always-visible star on every row would put a column of grey icons down a
+ * sidebar whose job is to list names.
+ */
+.conversation-item-star {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: 2rem;
+  block-size: 2rem;
+  margin-inline-end: var(--spacing-1);
+  border: none;
+  border-radius: var(--radius-inner);
+  background: none;
+  color: var(--color-text-disabled);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.conversation-item:hover .conversation-item-star,
+.conversation-item-star:focus-visible,
+.conversation-item[data-starred="true"] .conversation-item-star {
+  opacity: 1;
+}
+
+.conversation-item[data-starred="true"] .conversation-item-star {
+  color: var(--color-text-orange);
+}
+
+/*
+ * A starred star is filled, not just tinted.
+ *
+ * Lucide draws an outline and leaves `fill: none`, which at 16px is a few
+ * orange hairlines — legible only if you already know to look. The fill is
+ * what makes "starred" readable at a glance, and it carries the state
+ * independently of colour.
+ */
+.conversation-item[data-starred="true"] .conversation-item-star svg,
+.conversation-header-row [aria-pressed="true"] svg {
+  fill: currentcolor;
+}
+
+.conversation-item-star:hover {
+  background-color: var(--color-overlay-hover);
+  color: var(--color-text-primary);
+}
+
+.conversation-item[data-starred="true"] .conversation-item-star:hover {
+  color: var(--color-text-orange);
+}
+
+.conversation-item-star:focus-visible {
+  outline: 2px solid var(--color-border-emphasized);
+  outline-offset: -2px;
+}
+
+.conversation-section-heading {
+  margin: 0;
+  padding: var(--spacing-3) var(--spacing-3) var(--spacing-1);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-disabled);
+}
+
+/*
+ * Text for screen readers only. The star's own icon carries no name, and
+ * `title` alone is not a reliable accessible name.
+ */
+.sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /*

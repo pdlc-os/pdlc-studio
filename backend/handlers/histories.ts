@@ -1,6 +1,7 @@
 import { Context } from "hono";
 import type { HistoryListResponse } from "../../shared/types.ts";
 import { validateEncodedProjectName } from "../history/pathUtils.ts";
+import { getStarredSessions } from "../history/starred.ts";
 import { parseAllHistoryFiles } from "../history/parser.ts";
 import { groupConversations } from "../history/grouping.ts";
 import { conversationMatches } from "../history/search.ts";
@@ -71,11 +72,23 @@ export async function handleHistoriesRequest(c: Context) {
         : allFiles.filter((file) => conversationMatches(file, searchTerm));
 
     // Group conversations and remove duplicates
-    const conversations = groupConversations(conversationFiles);
+    const grouped = groupConversations(conversationFiles);
 
     logger.history.debug(
-      `After grouping: ${conversations.length} unique conversations`,
+      `After grouping: ${grouped.length} unique conversations`,
     );
+
+    /*
+     * Stars ride along with the listing rather than being fetched separately:
+     * the sidebar has to know which section every row belongs to before it can
+     * draw any of them, and a second round trip would show the list once
+     * unsorted and again a moment later.
+     */
+    const starred = await getStarredSessions(encodedProjectName);
+    const conversations = grouped.map((conversation) => ({
+      ...conversation,
+      isStarred: starred.has(conversation.sessionId),
+    }));
 
     const response: HistoryListResponse = {
       conversations,
