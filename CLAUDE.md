@@ -42,6 +42,7 @@ lefthook run pre-commit
 - `GET /api/directories?path=` - List subdirectories for the launch screen's folder picker. Omit `path` to list the home directory; `~` is expanded. Read-only, directories only, dot-directories hidden.
 - `POST /api/projects/create` - Create a project directory (`{ parentPath, name, initGit? }`) → `{ path }`
 - `POST /api/projects/clone` - `git clone` into a directory (`{ url, parentPath, name? }`) → `{ path }`
+- `PUT /api/projects/:encodedProjectName/histories/:sessionId/star` - Star or unstar a conversation (`{ isStarred }`)
 - `GET /api/commands?workingDirectory=` - Slash commands available to the composer's `/` picker → `{ commands }`
 
 The `create` and `clone` routes are registered **before** the parameterised
@@ -430,7 +431,7 @@ therefore falls back to `currentSessionId`, which is what lets the sidebar
 highlight the row it just gained and the header name it. Deleting also compares
 against that key, so deleting a conversation started in this tab closes it.
 
-The URL is deliberately *not* rewritten to `?sessionId=` mid-conversation:
+The URL is deliberately _not_ rewritten to `?sessionId=` mid-conversation:
 `useAutoHistoryLoader` keys off that param and would refetch the transcript from
 disk over the messages already in memory.
 
@@ -462,7 +463,7 @@ on the chat request, persisted in `AppSettings`.
 
 **The model list comes from the CLI, not a hardcoded table.** It rides along on
 the `/api/commands` response, because `initializationResult()` reports commands
-*and* models from one handshake — a separate `/api/models` would spawn a second
+_and_ models from one handshake — a separate `/api/models` would spawn a second
 CLI process for data already in hand. Each model also reports whether it
 honours effort and adaptive thinking, so the effort control can be disabled
 rather than silently ignored. Only an explicit `supportsEffort: false` disables
@@ -494,7 +495,7 @@ Safari and browsers without the API. A DOM probe therefore shows an
 The real gap was **tool results**. Only Edit (`diff`) and Bash (`bash`) implied a
 language, so a `Read` of a source file rendered as plaintext — which is most of
 the code this app displays. `ToolResultMessage.filePath` now carries the path
-from the *request* (a result returns contents with no indication of which file),
+from the _request_ (a result returns contents with no indication of which file),
 and `languageFromPath` maps its extension. Any tool naming a path qualifies,
 unlike the Files tab which lists only tools that write: what is displayed needs
 a language either way.
@@ -533,20 +534,20 @@ the pane on the right.
 
 **Search filters on content, not just titles.** The sidebar's box passes `q` to
 the existing histories endpoint, which scans each session's message text
-server-side, where that text already is. Filtering happens *before* grouping,
+server-side, where that text already is. Filtering happens _before_ grouping,
 so a session whose only match is in an earlier, superseded file still counts —
 grouping would have discarded that file as a duplicate. Input is debounced,
 since a hit re-scans every message of every session in the project.
 
 **Titles come from the session file**, not from the UI. Claude writes two kinds
 into the JSONL: `custom-title` (set by `/rename`) and `ai-title` (generated).
-A custom title wins; the parser takes the *last* of each, since both are
+A custom title wins; the parser takes the _last_ of each, since both are
 appended per turn rather than replaced.
 
 **Rename and delete go through the SDK** (`renameSession`, `deleteSession`), so
 a rename here is the same operation as the CLI's `/rename` and shows up in
 `claude --resume`. Both deliberately omit the SDK's `dir` option: the route
-carries the *encoded* project name, and decoding it back to a path is
+carries the _encoded_ project name, and decoding it back to a path is
 ambiguous because the separator and a literal hyphen are the same character
 (`-Users-me-pdlc-studio`). Session ids are UUIDs, so an unscoped lookup is both
 simpler and correct. Clear-all enumerates the project's own history directory,
@@ -590,7 +591,7 @@ invisible. It derives its list from the transcript: attached paths are
 parsed back out of the user's own messages, and written paths come from
 `ToolMessage.filePath`, captured at creation from the structured tool input.
 Deriving rather than keeping a side list is what makes the tab work on a
-*resumed* conversation. Only genuinely file-producing tools count
+_resumed_ conversation. Only genuinely file-producing tools count
 (`Write`/`Edit`/`MultiEdit`/`NotebookEdit`) — `Read` also carries `file_path`,
 and listing it would imply Claude created the file.
 
@@ -629,6 +630,13 @@ exposes: built-ins, user and project commands, skills, and plugin-provided
 commands (`plugin:skill`). Arrow keys move, Enter or Tab inserts, Escape
 dismisses without clearing the line, and matching is fuzzy — `srev` finds
 `security-review`.
+
+**The message reaches the SDK exactly as typed.** `backend/handlers/chat.ts`
+used to strip a leading `/`, inherited from a time when the command was a CLI
+argument. Under the Agent SDK the slash is what _marks_ the prompt as a command,
+so stripping it turned `/compact` into the word "compact" — Claude answered it
+in prose while no compaction ran, and every command the picker offers was
+reaching the model as a message that happened to read like one.
 
 **Discovery is the CLI's job.** `backend/handlers/commands.ts` opens a session
 and awaits `initializationResult()`, whose `commands` field is the resolved
@@ -695,6 +703,135 @@ sets it to `--color-text-secondary` rather than inheriting.
 Only a token that names a **real** command is tinted, so the colour doubles as
 validation: a typo stays plain text, and a failed discovery simply highlights
 nothing.
+
+### File mentions (`@`)
+
+Typing `@` completes the files staged for the message, so a prompt can point at
+one by name. Same keyboard model as the `/` picker deliberately — two
+completion menus behaving differently in one text box would be worse than
+either is useful.
+
+The differences follow from what a mention is. It belongs _inside_ a sentence
+("compare @a.ts with @b.ts"), so `getMentionQuery` searches back from the
+**caret** rather than anchoring to the start of the line, and it only counts
+when the `@` begins a word — otherwise an email address or a decorator in
+pasted code opens a menu. With nothing attached the key stays an ordinary
+character.
+
+Insertion is the bare filename, because the message already carries a labelled
+block of full paths (`withAttachments`) for Claude to resolve against. Two
+attachments with the same filename defeat that block, so those mentions carry
+the full path instead.
+
+**The caret is placed in a `useLayoutEffect` keyed on the value, not in a
+`requestAnimationFrame`.** The rAF can run before React commits the new value,
+in which case `setSelectionRange` lands on the old text and is then reset —
+which fires a `select` carrying a stale offset and leaves the picker open over
+a token that no longer exists. This was only visible in a browser; the caret
+state and the DOM disagreed while every unit test passed.
+
+### Context island
+
+A status surface in the composer footer, beside the model selector, reporting
+how full the context window is and swapping to a spinner while Claude compacts.
+Built as a slot rather than a percentage readout so later states can take the
+same space.
+
+It renders nothing until a turn has reported usage — a fresh conversation has
+measured nothing, and a 0% would be a claim rather than a reading. Cached
+tokens count toward the fill because they still occupy the window, and when a
+turn used several models the **largest** window wins, so a subagent on a
+cheaper model is not mistaken for the main conversation.
+
+Two placement traps, both found only in a live session:
+
+- It must sit **outside** the send/stop swap in `ChatInput`. Compaction only
+  runs mid-turn, so an island in the idle branch is hidden for exactly the
+  window it has something to report.
+- `adaptContext` in `useStreamParser` copies `StreamingContext` field by field
+  and every field is optional, so a callback missing there is silently dropped
+  rather than caught by the type checker. Add new ones in **both** places.
+
+Compaction refreshes the reading from the boundary rather than waiting for the
+next turn's result. Both spellings are read: the SDK type declares
+`compact_metadata.post_tokens`, while the session file writes
+`compactMetadata.postTokens`. An observed manual `/compact` carries no
+post-count at all, so absence reports nothing rather than a reassuring 0%.
+
+## The CLI's command plumbing is not user speech
+
+Running a slash command emits several user-role turns the user never typed, and
+rendering them verbatim attributed paragraphs of XML to them.
+`utils/localCommandTurns.ts` turns each back into what it is:
+
+| Arrives as               | Shown as                                                    |
+| ------------------------ | ----------------------------------------------------------- |
+| `<command-name>…`        | the command as typed (`/compact`)                           |
+| `<local-command-caveat>` | dropped — it addresses the model                            |
+| `<local-command-stdout>` | unwrapped, or dropped if it only acknowledges (`Compacted`) |
+
+Output carrying a real answer (`/cost`) is kept, so this is not a blanket
+filter. Separately, the post-compaction summary the CLI feeds back in is
+dropped on its own `isCompactSummary` flag — thousands of words restating the
+conversation the user is already looking at. The flag is used rather than the
+English it opens with.
+
+`compact_boundary` is in `NON_DISPLAYED_SYSTEM_SUBTYPES`; its numbers drive the
+island instead.
+
+## Starring conversations
+
+Offered three ways — an icon on the sidebar row, the row's right-click menu,
+and the conversation header — because the conversation you want to star is not
+always the one that is open, and a hover-revealed icon on a narrow sidebar is
+easy to miss.
+
+Starred conversations get their own section above the rest. Membership is a
+**partition, not a sort**, so a conversation is in exactly one section and can
+never appear twice; the section is absent when nothing is starred.
+
+**Stars live in `~/.pdlc-studio/starred.json`** (`backend/history/starred.ts`),
+not in the session JSONL: a star is this app's preference, not part of the
+conversation, and writing it into a file the CLI owns and appends to would lose
+it the moment the CLI rewrote the file. Server-side rather than localStorage so
+it survives a cleared cache.
+
+They ride along with the histories listing (`isStarred` on
+`ConversationSummary`) rather than being fetched separately — the sidebar has
+to know which section a row belongs to before it can draw it.
+
+`PUT /api/projects/:encodedProjectName/histories/:sessionId/star` takes
+`{ isStarred }` and **states the desired state rather than toggling**: a client
+list a few seconds stale would otherwise flip the star the wrong way. Note PUT
+had to be added to the CORS `allowMethods` — the same gap that made PATCH and
+DELETE unreachable when they were added.
+
+## Exporting a transcript
+
+An Export control at the right edge of the conversation header, mirrored in
+that header's right-click menu, offering Markdown, HTML and PDF.
+
+**Markdown is the single source of truth.** HTML is that markdown parsed
+(`marked`), and PDF is that HTML printed, so the three cannot drift into
+describing the same conversation differently.
+
+- The HTML is standalone — its own stylesheet inline, nothing to fetch — and
+  commits to light, since a page printed from a dark theme is a wall of ink.
+- PDF goes through the print dialog and says so in the menu. No browser API
+  writes a PDF; bundling a PDF library or rendering server-side both mean
+  shipping a second engine to reproduce a page this one already lays out.
+  `saveTranscript` prints via a hidden iframe, cleaning up on `afterprint`
+  (removing it earlier cancels the print) with a timer as a floor.
+
+Two things a transcript does that ordinary markdown does not:
+
+- **Fences are sized longer than anything inside them.** Tool output routinely
+  contains ``` — a diff of the exporter would — and a three-backtick fence
+  around it closes at the first one, spilling the rest of the transcript out as
+  prose.
+- **The parsed HTML is sanitized** (`utils/sanitizeHtml.ts`, allowlist over a
+  `DOMParser` tree). `marked` does not sanitize, and Claude quotes whatever it
+  read off the web or out of a repository into a file the user will open.
 
 ## Conversation Typography
 
