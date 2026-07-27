@@ -1132,8 +1132,14 @@ optional dependencies, but this app keeps passing its own detected
 
 ### Individual Commands
 
-- Development: `make dev` runs both servers in one terminal; `make dev-backend`
-  / `make dev-frontend` still run them separately
+- Development: `make dev` runs both servers in one terminal, **backend first**.
+  Vite starts happily without the backend — `GET /` returns 200 — but every
+  proxied `/api` call returns 500 until the backend is listening, so loading
+  the app in that window shows a broken page that only a refresh fixes. The
+  wait is bounded (`DEV_WAIT`, default 60s) and starts the frontend anyway on
+  timeout, so a backend that fails to boot still shows you its output.
+  `DEV_PORT` follows a non-default `PORT`. `make dev-backend` /
+  `make dev-frontend` still run them separately
 - `make dev-debug` is the same with per-message SDK payload logging on the
   backend, which is off by default because it logs the full JSON of every
   message and buries anything worth reading
