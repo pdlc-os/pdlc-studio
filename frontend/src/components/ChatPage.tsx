@@ -33,7 +33,8 @@ import { RenameConversationDialog } from "./chat/RenameConversationDialog";
 import { FilesPanel } from "./chat/FilesPanel";
 import { collectConversationFiles } from "../utils/conversationFiles";
 import type { ConversationSummary, SDKStatus } from "../types";
-import type { ContextUsage } from "../utils/contextUsage";
+import { usageFromTokens, type ContextUsage } from "../utils/contextUsage";
+import { SlashCommandsProvider } from "../contexts/SlashCommandsContext";
 import { SettingsButton } from "./SettingsButton";
 import { SettingsModal } from "./SettingsModal";
 import { ChatInput } from "./chat/ChatInput";
@@ -273,6 +274,17 @@ export function ChatPage() {
           updateLastMessage,
           onSessionId: setCurrentSessionId,
           onContextUsage: setContextUsage,
+          // Compaction reports what it left behind but not the window it left
+          // it in, so the window carries over from the last reading. Nothing to
+          // show if there has not been one — the island stays hidden rather
+          // than inventing a denominator.
+          onContextCompacted: (postTokens: number) =>
+            setContextUsage((previous) =>
+              previous
+                ? (usageFromTokens(postTokens, previous.contextWindow) ??
+                  previous)
+                : null,
+            ),
           onStatusChange: setCliStatus,
           shouldShowInitMessage: () => !hasShownInitMessage,
           onInitMessageShown: () => setHasShownInitMessage(true),
@@ -606,241 +618,244 @@ export function ChatPage() {
   }, [isLoading, currentRequestId, handleAbort]);
 
   return (
-    <div className="app-shell">
-      {/* Header */}
-      <HStack justify="between" vAlign="center" gap={4}>
-        {/*
-         * vAlign="start", not "center": the text beside the mark is a VStack
-         * that grows a second row once a working directory is open, and
-         * centring against that two-row block drops the mark ~16px below the
-         * app name it is supposed to sit next to.
-         */}
-        <HStack gap={3} vAlign="start">
+    /*
+     * Discovery happens once here rather than in each consumer: it spawns a CLI
+     * process, and both the composer's picker and the transcript's command
+     * colouring need the same answer.
+     */
+    <SlashCommandsProvider workingDirectory={workingDirectory}>
+      <div className="app-shell">
+        {/* Header */}
+        <HStack justify="between" vAlign="center" gap={4}>
           {/*
-           * The mark sits outside Breadcrumbs rather than inside the first
-           * item: BreadcrumbItem renders a link, and burying an image in it
-           * would make the click target and its accessible name inconsistent
-           * with the other crumbs.
+           * vAlign="start", not "center": the text beside the mark is a VStack
+           * that grows a second row once a working directory is open, and
+           * centring against that two-row block drops the mark ~16px below the
+           * app name it is supposed to sit next to.
            */}
-          <button
-            type="button"
-            className="app-mark-button"
-            onClick={handleBackToProjects}
-            aria-label="PDLC Studio home"
-          >
-            <AppIcon size={40} variant="mark" />
-          </button>
-          <VStack gap={1}>
+          <HStack gap={3} vAlign="start">
             {/*
-             * Right-clicking the header renames the open conversation, the
-             * same action the sidebar row offers — the header is where the
-             * name is showing, so it is where people reach for it.
+             * The mark sits outside Breadcrumbs rather than inside the first
+             * item: BreadcrumbItem renders a link, and burying an image in it
+             * would make the click target and its accessible name inconsistent
+             * with the other crumbs.
              */}
-            <Breadcrumbs label="Breadcrumb">
-              <BreadcrumbItem onClick={handleBackToProjects}>
-                <span className="app-name">PDLC Studio</span>
-              </BreadcrumbItem>
-            </Breadcrumbs>
-          </VStack>
-        </HStack>
-        <HStack gap={3} vAlign="center">
-          {hasActiveConversation ? (
-            <SegmentedControl
-              label="Conversation view"
-              size="sm"
-              value={activeTab}
-              onChange={handleTabChange}
+            <button
+              type="button"
+              className="app-mark-button"
+              onClick={handleBackToProjects}
+              aria-label="PDLC Studio home"
             >
-              <SegmentedControlItem value="chat" label="Chat" />
-              <SegmentedControlItem value="files" label="Files" />
-            </SegmentedControl>
-          ) : null}
-          <SettingsButton onClick={handleSettingsClick} />
-        </HStack>
-      </HStack>
-
-      {/* Main Content */}
-      {historyError ? (
-        /* Error loading conversation history */
-        <div className="app-scroll">
-          <Banner
-            status="error"
-            title="Error loading conversation"
-            description={historyError}
-            endContent={
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => navigate({ search: "" })}
-                label="Start new conversation"
-              />
-            }
-          />
-        </div>
-      ) : (
-        <div className="chat-shell">
-          {workingDirectory && (
-            <ConversationSidebar
-              projectPath={workingDirectory}
-              conversations={conversations}
-              isLoading={conversationsLoading}
-              error={conversationsError}
-              activeSessionId={activeSessionKey}
-              onSelect={handleSelectConversation}
-              onNewSession={handleNewSession}
-              onRefresh={() => void refreshConversations()}
-              onRename={setRenameTarget}
-              onDelete={(conversation) =>
-                void handleDeleteConversation(conversation)
-              }
-              onClose={handleCloseConversation}
-              searchTerm={conversationSearch}
-              onSearchChange={setConversationSearch}
-              isSearching={isSearchingConversations}
-              onClearAll={() => void handleClearAllConversations()}
-            />
-          )}
-
-          {!hasActiveConversation ? (
-            /*
-             * Nothing is open. Deliberately not an empty chat: arriving from
-             * the launch screen should not start a session the user then has
-             * to abandon.
-             */
-            <div className="app-chat-region" data-testid="no-conversation">
-              <VStack justify="center" hAlign="center" height="100%" gap={3}>
-                <EmptyState
-                  title="No conversation open"
-                  description="Pick a conversation on the left to carry on where you left off, or start a new session."
-                />
-                <Button
-                  variant="primary"
-                  onClick={handleNewSession}
-                  label="New Session"
-                />
-              </VStack>
-            </div>
-          ) : historyLoading ? (
-            /*
-             * Scoped to the transcript pane. This used to replace the whole
-             * shell, so clicking a conversation made the sidebar and the
-             * conversation header vanish until the messages arrived.
-             */
-            <div className="app-chat-region">
-              <VStack justify="center" hAlign="center" height="100%">
-                <Spinner size="lg" label="Loading conversation history..." />
-              </VStack>
-            </div>
-          ) : activeTab === "files" ? (
-            <FilesPanel
-              files={conversationFiles}
-              workingDirectory={workingDirectory || undefined}
-            />
-          ) : (
-            <div className="app-chat-region">
+              <AppIcon size={40} variant="mark" />
+            </button>
+            <VStack gap={1}>
               {/*
-               * (3) The conversation's own header, inside the pane it belongs
-               * to. It used to sit in the page header, where it started at the
-               * far left of the window and so read as a sibling of the app
-               * name rather than as the title of what is on the right.
-               *
-               * Right-clicking it renames, the same action the sidebar row
-               * offers — this is where the name is showing.
+               * Right-clicking the header renames the open conversation, the
+               * same action the sidebar row offers — the header is where the
+               * name is showing, so it is where people reach for it.
                */}
-              {hasActiveConversation ? (
-                <ContextMenu
-                  label="Conversation actions"
-                  isDisabled={activeConversation === null}
-                  items={[
-                    {
-                      label: "Rename conversation",
-                      onClick: () => setRenameTarget(activeConversation),
-                    },
-                    {
-                      label: "Close conversation",
-                      onClick: handleCloseConversation,
-                    },
-                  ]}
-                >
-                  <div className="conversation-header">
-                    <span className="conversation-header-title">
-                      {activeConversation?.title ?? "Untitled conversation"}
-                    </span>
-                    {/*
-                     * In full: a truncated UUID cannot be matched against
-                     * `claude --resume` output or a log line, which is the
-                     * only reason to show it.
-                     */}
-                    {/* Absent until the SDK reports the id for a new session. */}
-                    {activeSessionKey ? (
-                      <span className="conversation-header-session">
-                        {activeSessionKey}
-                      </span>
-                    ) : null}
-                  </div>
-                </ContextMenu>
-              ) : null}
-              <ChatLayout
-                emptyState={
-                  <EmptyState
-                    title="Start a conversation with Claude"
-                    description="Type your message below to begin."
-                  />
-                }
-                composer={
-                  <ChatInput
-                    input={input}
-                    isLoading={isLoading}
-                    currentRequestId={currentRequestId}
-                    onInputChange={setInput}
-                    onSubmit={() => sendMessage()}
-                    onAbort={handleAbort}
-                    permissionMode={permissionMode}
-                    onPermissionModeChange={setPermissionMode}
-                    showPermissions={isPermissionMode}
-                    permissionData={permissionData}
-                    planPermissionData={planPermissionData}
-                    workingDirectory={workingDirectory || undefined}
-                    attachments={attachments}
-                    attachmentError={attachmentError}
-                    isUploadingAttachments={isUploadingAttachments}
-                    onAttachFiles={(files) => void addAttachments(files)}
-                    onRemoveAttachment={removeAttachment}
-                    contextUsage={contextUsage}
-                    cliStatus={cliStatus}
-                  />
-                }
+              <Breadcrumbs label="Breadcrumb">
+                <BreadcrumbItem onClick={handleBackToProjects}>
+                  <span className="app-name">PDLC Studio</span>
+                </BreadcrumbItem>
+              </Breadcrumbs>
+            </VStack>
+          </HStack>
+          <HStack gap={3} vAlign="center">
+            {hasActiveConversation ? (
+              <SegmentedControl
+                label="Conversation view"
+                size="sm"
+                value={activeTab}
+                onChange={handleTabChange}
               >
-                {messages.length > 0 || isLoading ? (
-                  /*
-                   * Conversation typography is scoped to the transcript, not
-                   * the whole chat region: the composer is an input control and
-                   * stays on the UI font, so changing the reading face never
-                   * disturbs the thing you type into.
-                   */
-                  <div
-                    className="conversation-typography"
-                    data-font={conversationFont}
-                    data-size={conversationFontSize}
+                <SegmentedControlItem value="chat" label="Chat" />
+                <SegmentedControlItem value="files" label="Files" />
+              </SegmentedControl>
+            ) : null}
+            <SettingsButton onClick={handleSettingsClick} />
+          </HStack>
+        </HStack>
+
+        {/* Main Content */}
+        {historyError ? (
+          /* Error loading conversation history */
+          <div className="app-scroll">
+            <Banner
+              status="error"
+              title="Error loading conversation"
+              description={historyError}
+              endContent={
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate({ search: "" })}
+                  label="Start new conversation"
+                />
+              }
+            />
+          </div>
+        ) : (
+          <div className="chat-shell">
+            {workingDirectory && (
+              <ConversationSidebar
+                projectPath={workingDirectory}
+                conversations={conversations}
+                isLoading={conversationsLoading}
+                error={conversationsError}
+                activeSessionId={activeSessionKey}
+                onSelect={handleSelectConversation}
+                onNewSession={handleNewSession}
+                onRefresh={() => void refreshConversations()}
+                onRename={setRenameTarget}
+                onDelete={(conversation) =>
+                  void handleDeleteConversation(conversation)
+                }
+                onClose={handleCloseConversation}
+                searchTerm={conversationSearch}
+                onSearchChange={setConversationSearch}
+                isSearching={isSearchingConversations}
+                onClearAll={() => void handleClearAllConversations()}
+              />
+            )}
+
+            {!hasActiveConversation ? (
+              /*
+               * Nothing is open. Deliberately not an empty chat: arriving from
+               * the launch screen should not start a session the user then has
+               * to abandon.
+               */
+              <div className="app-chat-region" data-testid="no-conversation">
+                <VStack justify="center" hAlign="center" height="100%" gap={3}>
+                  <EmptyState
+                    title="No conversation open"
+                    description="Pick a conversation on the left to carry on where you left off, or start a new session."
+                  />
+                  <Button
+                    variant="primary"
+                    onClick={handleNewSession}
+                    label="New Session"
+                  />
+                </VStack>
+              </div>
+            ) : historyLoading ? (
+              /*
+               * Scoped to the transcript pane. This used to replace the whole
+               * shell, so clicking a conversation made the sidebar and the
+               * conversation header vanish until the messages arrived.
+               */
+              <div className="app-chat-region">
+                <VStack justify="center" hAlign="center" height="100%">
+                  <Spinner size="lg" label="Loading conversation history..." />
+                </VStack>
+              </div>
+            ) : activeTab === "files" ? (
+              <FilesPanel files={conversationFiles} />
+            ) : (
+              <div className="app-chat-region">
+                {/*
+                 * (3) The conversation's own header, inside the pane it belongs
+                 * to. It used to sit in the page header, where it started at the
+                 * far left of the window and so read as a sibling of the app
+                 * name rather than as the title of what is on the right.
+                 *
+                 * Right-clicking it renames, the same action the sidebar row
+                 * offers — this is where the name is showing.
+                 */}
+                {hasActiveConversation ? (
+                  <ContextMenu
+                    label="Conversation actions"
+                    isDisabled={activeConversation === null}
+                    items={[
+                      {
+                        label: "Rename conversation",
+                        onClick: () => setRenameTarget(activeConversation),
+                      },
+                      {
+                        label: "Close conversation",
+                        onClick: handleCloseConversation,
+                      },
+                    ]}
                   >
-                    <ChatMessages messages={messages} isLoading={isLoading} />
-                  </div>
+                    <div className="conversation-header">
+                      <span className="conversation-header-title">
+                        {activeConversation?.title ?? "Untitled conversation"}
+                      </span>
+                      {/*
+                       * In full: a truncated UUID cannot be matched against
+                       * `claude --resume` output or a log line, which is the
+                       * only reason to show it.
+                       */}
+                      {/* Absent until the SDK reports the id for a new session. */}
+                      {activeSessionKey ? (
+                        <span className="conversation-header-session">
+                          {activeSessionKey}
+                        </span>
+                      ) : null}
+                    </div>
+                  </ContextMenu>
                 ) : null}
-              </ChatLayout>
-            </div>
-          )}
-        </div>
-      )}
+                <ChatLayout
+                  emptyState={
+                    <EmptyState
+                      title="Start a conversation with Claude"
+                      description="Type your message below to begin."
+                    />
+                  }
+                  composer={
+                    <ChatInput
+                      input={input}
+                      isLoading={isLoading}
+                      currentRequestId={currentRequestId}
+                      onInputChange={setInput}
+                      onSubmit={() => sendMessage()}
+                      onAbort={handleAbort}
+                      permissionMode={permissionMode}
+                      onPermissionModeChange={setPermissionMode}
+                      showPermissions={isPermissionMode}
+                      permissionData={permissionData}
+                      planPermissionData={planPermissionData}
+                      attachments={attachments}
+                      attachmentError={attachmentError}
+                      isUploadingAttachments={isUploadingAttachments}
+                      onAttachFiles={(files) => void addAttachments(files)}
+                      onRemoveAttachment={removeAttachment}
+                      contextUsage={contextUsage}
+                      cliStatus={cliStatus}
+                    />
+                  }
+                >
+                  {messages.length > 0 || isLoading ? (
+                    /*
+                     * Conversation typography is scoped to the transcript, not
+                     * the whole chat region: the composer is an input control and
+                     * stays on the UI font, so changing the reading face never
+                     * disturbs the thing you type into.
+                     */
+                    <div
+                      className="conversation-typography"
+                      data-font={conversationFont}
+                      data-size={conversationFontSize}
+                    >
+                      <ChatMessages messages={messages} isLoading={isLoading} />
+                    </div>
+                  ) : null}
+                </ChatLayout>
+              </div>
+            )}
+          </div>
+        )}
 
-      {/* Settings Modal */}
-      <SettingsModal isOpen={isSettingsOpen} onClose={handleSettingsClose} />
+        {/* Settings Modal */}
+        <SettingsModal isOpen={isSettingsOpen} onClose={handleSettingsClose} />
 
-      <RenameConversationDialog
-        isOpen={renameTarget !== null}
-        initialTitle={renameTarget?.title ?? ""}
-        onCancel={() => setRenameTarget(null)}
-        onConfirm={(title) => void handleRenameConfirm(title)}
-      />
-    </div>
+        <RenameConversationDialog
+          isOpen={renameTarget !== null}
+          initialTitle={renameTarget?.title ?? ""}
+          onCancel={() => setRenameTarget(null)}
+          onConfirm={(title) => void handleRenameConfirm(title)}
+        />
+      </div>
+    </SlashCommandsProvider>
   );
 }

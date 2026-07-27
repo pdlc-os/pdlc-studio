@@ -8,6 +8,7 @@ import type {
   TimestampedSDKMessage,
 } from "../types";
 import { readContextUsage, type ContextUsage } from "./contextUsage";
+import { readLocalCommandOutput } from "./localCommandOutput";
 import {
   convertSystemMessage,
   convertResultMessage,
@@ -49,6 +50,9 @@ export const NON_DISPLAYED_SYSTEM_SUBTYPES: readonly string[] = [
   // subdirectory). Carries a whole command array, so leaving it unlisted dumps
   // the entire catalogue into the transcript as JSON.
   "commands_changed",
+  // Marks where a compaction happened. Its numbers drive the context island,
+  // which is a better place for them than a JSON blob mid-conversation.
+  "compact_boundary",
   // Live status ('requesting' / 'compacting'). It drives the composer's
   // context island; rendering it in the transcript would add a JSON dump per
   // turn.
@@ -62,6 +66,30 @@ const NON_DISPLAYED_SYSTEM_SUBTYPE_SET: ReadonlySet<string> = new Set(
 /** True when a `type: "system"` subtype should be kept out of the transcript. */
 export function isNonDisplayedSystemSubtype(subtype: string): boolean {
   return NON_DISPLAYED_SYSTEM_SUBTYPE_SET.has(subtype);
+}
+
+/**
+ * Tokens left after a compaction, from either spelling of the metadata.
+ *
+ * The SDK's type declares `compact_metadata.post_tokens`, but the same record
+ * is written into the session file as `compactMetadata.postTokens` — so a
+ * replayed conversation and a live stream do not necessarily agree, and reading
+ * only one spelling silently never fires for the other.
+ *
+ * Returns null rather than 0 when absent, which is the common case: an observed
+ * manual `/compact` reports `preTokens` and a duration but no post-count at all.
+ * A 0 there would paint a reassuring empty meter that nothing measured.
+ */
+export function readCompactedTokens(message: unknown): number | null {
+  const record = message as {
+    compact_metadata?: { post_tokens?: number };
+    compactMetadata?: { postTokens?: number };
+  };
+
+  const postTokens =
+    record.compact_metadata?.post_tokens ?? record.compactMetadata?.postTokens;
+
+  return typeof postTokens === "number" ? postTokens : null;
 }
 
 /**
@@ -87,6 +115,8 @@ export interface ProcessingContext {
   // Composer status island
   /** Context-window fill, reported once a turn's result arrives. */
   onContextUsage?: (usage: ContextUsage) => void;
+  /** Tokens left after a compaction, for an immediate island refresh. */
+  onContextCompacted?: (postTokens: number) => void;
   /** Live CLI status; `compacting` is what drives the island's animation. */
   onStatusChange?: (status: SDKStatus) => void;
 
@@ -378,6 +408,18 @@ export class UnifiedMessageProcessor {
       context.onStatusChange?.(status);
     }
 
+    // Compaction is the one event that makes the context reading fall rather
+    // than rise, and the boundary is the only message that says by how much.
+    // Waiting for the next turn's result would leave the island showing the
+    // pre-compaction number at exactly the moment it is being read.
+    if (message.subtype === "compact_boundary") {
+      const postTokens = readCompactedTokens(message);
+
+      if (postTokens !== null) {
+        context.onContextCompacted?.(postTokens);
+      }
+    }
+
     if (isNonDisplayedSystemSubtype(message.subtype)) {
       return;
     }
@@ -533,28 +575,45 @@ export class UnifiedMessageProcessor {
             toolUseResult,
           );
         } else if (contentItem.type === "text") {
-          // Regular text content
-          const userMessage: ChatMessage = {
-            type: "chat",
-            role: "user",
-            content: (contentItem as { text: string }).text,
+          this.addUserText(
+            (contentItem as { text: string }).text,
             timestamp,
-          };
-          localContext.addMessage(userMessage);
+            localContext,
+          );
         }
       }
     } else if (typeof messageContent === "string") {
-      // Simple string content
-      const userMessage: ChatMessage = {
-        type: "chat",
-        role: "user",
-        content: messageContent,
-        timestamp,
-      };
-      localContext.addMessage(userMessage);
+      this.addUserText(messageContent, timestamp, localContext);
     }
 
     return messages;
+  }
+
+  /**
+   * Adds a user-role text turn, unless it is a slash command's own output.
+   *
+   * The CLI reports that output as a user turn wrapped in
+   * `<local-command-stdout>`, which is neither something the user typed nor
+   * meant to be read with its tags on. Acknowledgements ("Compacted") restate
+   * what the transcript already shows and are dropped; anything with real
+   * content is kept, unwrapped, because some commands put their whole answer
+   * there.
+   */
+  private addUserText(
+    text: string,
+    timestamp: number,
+    context: ProcessingContext,
+  ): void {
+    const commandOutput = readLocalCommandOutput(text);
+
+    if (commandOutput?.isRedundant) return;
+
+    context.addMessage({
+      type: "chat",
+      role: "user",
+      content: commandOutput ? commandOutput.text : text,
+      timestamp,
+    } satisfies ChatMessage);
   }
 
   /**

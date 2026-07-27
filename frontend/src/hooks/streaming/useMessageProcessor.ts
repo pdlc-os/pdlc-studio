@@ -21,6 +21,8 @@ export interface StreamingContext {
   onAbortRequest?: () => void;
   /** Context-window fill, reported once a turn's result arrives. */
   onContextUsage?: (usage: ContextUsage) => void;
+  /** Tokens left after a compaction, for an immediate island refresh. */
+  onContextCompacted?: (postTokens: number) => void;
   /** Live CLI status; `compacting` is what drives the island's animation. */
   onStatusChange?: (status: SDKStatus) => void;
 }

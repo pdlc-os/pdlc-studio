@@ -647,4 +647,130 @@ describe("useStreamParser", () => {
       expect(onStatusChange).toHaveBeenLastCalledWith(null);
     });
   });
+
+  describe("compaction", () => {
+    function compactBoundary(postTokens?: number) {
+      return JSON.stringify({
+        type: "claude_json",
+        data: {
+          type: "system",
+          subtype: "compact_boundary",
+          compact_metadata: {
+            trigger: "manual",
+            pre_tokens: 120_000,
+            ...(postTokens === undefined ? {} : { post_tokens: postTokens }),
+          },
+          session_id: "s1",
+          uuid: generateId(),
+        },
+      });
+    }
+
+    it("reports what compaction left behind, and stays out of the transcript", () => {
+      const { result } = renderHook(() => useStreamParser());
+      const onContextCompacted = vi.fn();
+
+      result.current.processStreamLine(compactBoundary(9_000), {
+        ...mockContext,
+        onContextCompacted,
+      });
+
+      expect(onContextCompacted).toHaveBeenCalledWith(9_000);
+      // The island is where these numbers belong; the boundary itself would
+      // render as a JSON dump mid-conversation.
+      expect(mockContext.addMessage).not.toHaveBeenCalled();
+    });
+
+    it("reads the session file's camelCase spelling too", () => {
+      // The SDK type says compact_metadata.post_tokens, but the record written
+      // to the session file is compactMetadata.postTokens — a replayed
+      // conversation would otherwise never report anything.
+      const { result } = renderHook(() => useStreamParser());
+      const onContextCompacted = vi.fn();
+
+      result.current.processStreamLine(
+        JSON.stringify({
+          type: "claude_json",
+          data: {
+            type: "system",
+            subtype: "compact_boundary",
+            compactMetadata: {
+              trigger: "auto",
+              preTokens: 1_001_762,
+              postTokens: 14_365,
+            },
+            session_id: "s1",
+            uuid: generateId(),
+          },
+        }),
+        { ...mockContext, onContextCompacted },
+      );
+
+      expect(onContextCompacted).toHaveBeenCalledWith(14_365);
+    });
+
+    it("says nothing when the boundary carries no post-compaction count", () => {
+      const { result } = renderHook(() => useStreamParser());
+      const onContextCompacted = vi.fn();
+
+      result.current.processStreamLine(compactBoundary(), {
+        ...mockContext,
+        onContextCompacted,
+      });
+
+      // post_tokens is optional in the SDK type. Reporting a 0 here would
+      // show a reassuring 0% that nothing measured.
+      expect(onContextCompacted).not.toHaveBeenCalled();
+    });
+
+    it("drops the CLI's 'Compacted' acknowledgement", () => {
+      const { result } = renderHook(() => useStreamParser());
+
+      result.current.processStreamLine(
+        JSON.stringify({
+          type: "claude_json",
+          data: {
+            type: "user",
+            message: {
+              role: "user",
+              content:
+                "<local-command-stdout>Compacted </local-command-stdout>",
+            },
+            session_id: "s1",
+            uuid: generateId(),
+            parent_tool_use_id: null,
+          },
+        }),
+        mockContext,
+      );
+
+      expect(mockContext.addMessage).not.toHaveBeenCalled();
+    });
+
+    it("keeps command output that says something, without its wrapper", () => {
+      const { result } = renderHook(() => useStreamParser());
+
+      result.current.processStreamLine(
+        JSON.stringify({
+          type: "claude_json",
+          data: {
+            type: "user",
+            message: {
+              role: "user",
+              content:
+                "<local-command-stdout>Total cost: $0.42</local-command-stdout>",
+            },
+            session_id: "s1",
+            uuid: generateId(),
+            parent_tool_use_id: null,
+          },
+        }),
+        mockContext,
+      );
+
+      expect(mockContext.addMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ role: "user", content: "Total cost: $0.42" }),
+      );
+    });
+  });
 });

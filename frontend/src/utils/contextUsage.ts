@@ -36,21 +36,40 @@ export function readContextUsage(
       (usage.cacheReadInputTokens ?? 0) +
       (usage.cacheCreationInputTokens ?? 0);
 
-    const candidate: ContextUsage = {
-      usedTokens,
-      contextWindow: usage.contextWindow,
-      percent: Math.min(
-        100,
-        Math.max(0, Math.round((usedTokens / usage.contextWindow) * 100)),
-      ),
-    };
+    const candidate = usageFromTokens(usedTokens, usage.contextWindow);
 
-    if (!best || candidate.contextWindow > best.contextWindow) {
+    if (candidate && (!best || candidate.contextWindow > best.contextWindow)) {
       best = candidate;
     }
   }
 
   return best;
+}
+
+/**
+ * A reading built from a token count against a known window.
+ *
+ * Compaction reports what it left behind (`post_tokens`) but not the window it
+ * left it in, so the window has to come from the last reading. Without this the
+ * island would sit on its pre-compaction number until the *next* turn ended,
+ * which is precisely the moment a user looks at it to see whether compaction
+ * bought them anything.
+ */
+export function usageFromTokens(
+  usedTokens: number,
+  contextWindow: number,
+): ContextUsage | null {
+  if (!Number.isFinite(usedTokens) || usedTokens < 0) return null;
+  if (!Number.isFinite(contextWindow) || contextWindow <= 0) return null;
+
+  return {
+    usedTokens,
+    contextWindow,
+    percent: Math.min(
+      100,
+      Math.max(0, Math.round((usedTokens / contextWindow) * 100)),
+    ),
+  };
 }
 
 /** Compact form for the island: "12k / 200k". */

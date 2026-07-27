@@ -93,7 +93,10 @@ describe("useClaudeStreaming", () => {
         type: "claude_json",
         data: {
           ...makeSystemInitMessage({ uuid: generateId() }),
-          subtype: "compact_boundary",
+          // Any subtype outside NON_DISPLAYED_SYSTEM_SUBTYPES will do; this one
+          // is deliberately not `compact_boundary`, which is now filtered
+          // because its numbers drive the context island instead.
+          subtype: "informational",
         },
       }),
       mockContext,
@@ -102,7 +105,7 @@ describe("useClaudeStreaming", () => {
     expect(mockContext.addMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "system",
-        subtype: "compact_boundary",
+        subtype: "informational",
         timestamp: expect.any(Number),
       }),
     );

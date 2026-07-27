@@ -77,6 +77,7 @@ export function useStreamParser() {
         // dropped rather than caught by the type checker — add new ones in both
         // places.
         onContextUsage: context.onContextUsage,
+        onContextCompacted: context.onContextCompacted,
         onStatusChange: context.onStatusChange,
       };
     },
