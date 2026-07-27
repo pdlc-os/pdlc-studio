@@ -885,6 +885,34 @@ Note the header — title, star, export and the view toggle — renders for _eve
 tab. Scoping it to the chat branch left Files and Agents with no way back: the
 control that switches tabs vanished the moment it was used.
 
+### Agent teams
+
+A team section at the top of the Agents tab, read from the CLI's own state:
+`~/.claude/teams/session-<first 8 of the session id>/config.json`
+(`backend/history/teams.ts`). Nothing in the SDK exposes teams —
+`SDKSessionInfo` carries no agent, team or parent metadata — so that file is
+the only source, which makes it a private interface this app does not own.
+Every field is therefore optional and unknown ones are tolerated.
+
+It shows each member's name, agentType, model, the colour the CLI assigned it
+(so the panel and the terminal name the same agent), and its **charter** — the
+prompt the teammate was given, which is the only record anywhere of what that
+agent was asked to do.
+
+**A teammate cannot be opened as a conversation, and this is not an oversight.**
+Verified against a real six-member team:
+
+- no member carries a `sessionId`; only the lead has one, at the top level
+- the five teammates wrote **no session files** — they run `in-process`
+- the lead's own transcript has no agent attribution either: all 73 entries are
+  `isSidechain: false` and the only `origin` is `{"kind":"human"}`
+
+So teammate work exists in no transcript on disk; there is nothing to resume.
+`member.sessionId` is still read first when deciding whether to offer Open, so
+the action appears by itself if the CLI ever starts recording one. A test
+asserts teammates have no session, which is what should fail first if that
+changes.
+
 ## Conversation Typography
 
 The message transcript has its own typeface and text scale, chosen in Settings →

@@ -213,3 +213,43 @@ export interface SlashCommandsResponse {
   commands: SlashCommandInfo[];
   models: ModelOption[];
 }
+
+/**
+ * A member of an agent team, read from the CLI's own team config.
+ *
+ * Every field beyond the id is optional: this mirrors a private on-disk
+ * interface, so a shape change should cost a detail rather than the panel.
+ */
+export interface TeamMemberInfo {
+  agentId: string;
+  name?: string;
+  agentType?: string;
+  /** "in-process", "tmux", ... — how the teammate is executing. */
+  backendType?: string;
+  tmuxPaneId?: string;
+  cwd?: string;
+  joinedAt?: number;
+  /** Model the teammate runs on, e.g. "opus". */
+  model?: string;
+  color?: string;
+  planModeRequired?: boolean;
+  /** The instruction the teammate was given — its charter. */
+  prompt?: string;
+  /**
+   * Verified absent on a real team: teammates run in-process and write no
+   * session of their own. Only the lead has one.
+   */
+  sessionId?: string;
+}
+
+export interface TeamInfo {
+  name: string;
+  createdAt?: number;
+  leadAgentId?: string;
+  leadSessionId?: string;
+  members: TeamMemberInfo[];
+}
+
+export interface SessionTeamResponse {
+  team: TeamInfo | null;
+}

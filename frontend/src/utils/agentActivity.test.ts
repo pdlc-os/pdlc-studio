@@ -263,3 +263,61 @@ describe("groupByWorkflow", () => {
     ]);
   });
 });
+
+describe("scale", () => {
+  /**
+   * Real fan-outs are not small. Nothing here caps, truncates or samples, and
+   * these assert that rather than trusting it — a silent top-N would make the
+   * panel quietly lie about how much work is in flight.
+   */
+  const MANY = 250;
+
+  function bigTeam(): AgentActivity {
+    const events: AgentEvent[] = [];
+    for (let i = 0; i < MANY; i++) {
+      events.push({
+        kind: "started",
+        taskId: `t${i}`,
+        description: `Task ${i}`,
+        // Spread across 25 workflows, plus some with none at all.
+        workflowName: i % 10 === 0 ? undefined : `workflow-${i % 25}`,
+        at: 1000 + i,
+      });
+    }
+    return fold(...events);
+  }
+
+  it("keeps every task, however many there are", () => {
+    expect(bigTeam().tasks).toHaveLength(MANY);
+  });
+
+  it("counts every running task", () => {
+    expect(runningTasks(bigTeam())).toHaveLength(MANY);
+  });
+
+  it("groups them all without dropping any", () => {
+    const groups = groupByWorkflow(bigTeam());
+    const total = groups.reduce((sum, g) => sum + g.tasks.length, 0);
+
+    expect(total).toBe(MANY);
+    // 25 named workflows minus those whose slots fell on the unnamed stride,
+    // plus the single unnamed group.
+    expect(groups.length).toBeGreaterThan(20);
+    expect(groups.filter((g) => g.workflowName === null)).toHaveLength(1);
+  });
+
+  it("replaces a large live set in one event", () => {
+    const state = reduceAgentActivity(bigTeam(), {
+      kind: "liveSet",
+      at: 9999,
+      tasks: Array.from({ length: MANY }, (_, i) => ({
+        taskId: `t${i}`,
+        taskType: "task",
+        description: `Task ${i}`,
+      })),
+    });
+
+    expect(state.tasks).toHaveLength(MANY);
+    expect(runningTasks(state)).toHaveLength(MANY);
+  });
+});
