@@ -181,30 +181,35 @@ jobs:
       # macOS ships as a mountable disk image. Renaming the executable to .dmg
       # would produce a file macOS cannot mount, so build a real UDZO image with
       # the binary inside. UDZO is compressed, which shrinks the download again.
-      # `hdiutil create` needs room for a whole second copy of the binary, and
-      # 1.0.0 failed here with "No space left on device" on both macOS runners.
-      # The dependency trees have already done their job — deno compile embeds
-      # what it needs — so they are just occupying the space the image wants.
-      - name: Reclaim disk space before packaging
-        if: runner.os == 'macOS'
-        run: |
-          set -euo pipefail
-          rm -rf frontend/node_modules backend/node_modules
-          df -h / | tail -1
-
+      # "No space left on device" here is about the *image*, not the runner:
+      # df reports ~96 GiB free, and the error names the mounted volume
+      # ("could not access /Volumes/PDLC Studio/..."). Left to size the image
+      # itself from -srcfolder, hdiutil allows too little slack for filesystem
+      # overhead, which is why only the larger x86_64 binary failed while arm64
+      # passed. Sizing it explicitly with headroom removes the guesswork.
       - name: Package macOS disk image
         if: runner.os == 'macOS'
         run: |
           set -euo pipefail
+          df -h / | tail -1
+
           STAGING="$RUNNER_TEMP/dmg"
           rm -rf "$STAGING"
           mkdir -p "$STAGING"
-          # Moved, not copied: the raw binary is discarded after packaging
-          # anyway, and holding two copies at once is what ran the disk out.
+          # Moved, not copied: the raw binary is deleted after packaging
+          # anyway, so a second copy would only ever be thrown away.
           mv "dist/${{ matrix.artifact_name }}" "$STAGING/pdlc-studio"
           chmod +x "$STAGING/pdlc-studio"
+
+          BYTES=$(stat -f%z "$STAGING/pdlc-studio")
+          SIZE_MB=$(( BYTES / 1024 / 1024 + 200 ))
+          echo "binary $(( BYTES / 1024 / 1024 ))MB -> image ${SIZE_MB}MB"
+
+          # UDZO still compresses the result; -size only bounds the volume the
+          # files are written into before compression.
           hdiutil create -volname "PDLC Studio" -srcfolder "$STAGING" \
-            -ov -format UDZO "dist/${{ matrix.artifact_name }}.dmg"
+            -size "${SIZE_MB}m" -ov -format UDZO \
+            "dist/${{ matrix.artifact_name }}.dmg"
 
       - name: Package Linux tarball
         if: runner.os == 'Linux'
