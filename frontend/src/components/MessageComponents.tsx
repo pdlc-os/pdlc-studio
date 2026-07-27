@@ -142,12 +142,37 @@ export function SystemMessageComponent({
 
 interface ToolMessageComponentProps {
   message: ToolMessage;
+  /** True when this is the last message and a turn is still running. */
+  isLatest?: boolean;
+  isStreaming?: boolean;
 }
 
-export function ToolMessageComponent({ message }: ToolMessageComponentProps) {
+export function ToolMessageComponent({
+  message,
+  isLatest = false,
+  isStreaming = false,
+}: ToolMessageComponentProps) {
   return (
     <ChatMessage sender="assistant">
-      <ChatToolCalls calls={[{ name: message.content, status: "running" }]} />
+      <ChatToolCalls
+        calls={[
+          {
+            name: message.content,
+            /*
+             * Every tool call used to be hardcoded "running", so each one span
+             * a spinner forever — most obviously on AskUserQuestion, which
+             * sits waiting for a person.
+             *
+             * ToolMessage carries no tool_use id, so a call cannot be matched
+             * to its result directly. Being the last thing in the transcript
+             * with a turn still in flight is the honest approximation: once
+             * anything follows it, the call is no longer what we are waiting
+             * on.
+             */
+            status: isLatest && isStreaming ? "running" : "complete",
+          },
+        ]}
+      />
     </ChatMessage>
   );
 }

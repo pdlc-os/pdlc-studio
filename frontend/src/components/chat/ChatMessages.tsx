@@ -53,7 +53,14 @@ export function ChatMessages({
     if (isSystemMessage(message)) {
       return <SystemMessageComponent key={key} message={message} />;
     } else if (isToolMessage(message)) {
-      return <ToolMessageComponent key={key} message={message} />;
+      return (
+        <ToolMessageComponent
+          key={key}
+          message={message}
+          isLatest={index === messages.length - 1}
+          isStreaming={isLoading}
+        />
+      );
     } else if (isToolResultMessage(message)) {
       return <ToolResultMessageComponent key={key} message={message} />;
     } else if (isPlanMessage(message)) {

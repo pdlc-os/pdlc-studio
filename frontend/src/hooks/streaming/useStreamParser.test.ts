@@ -774,8 +774,14 @@ describe("useStreamParser", () => {
       expect(mockContext.addMessage).not.toHaveBeenCalled();
     });
 
-    it("keeps an ordinary message that merely looks like a resume prompt", () => {
-      // The flag is the signal, not the prose — a user quoting it still shows.
+    it("drops the resume prompt even when the flag is absent", () => {
+      /*
+       * The flag was the only signal at first, on the reasoning that it beats
+       * matching English. It turned out not to be carried on the live stream —
+       * a compaction watched in the browser still put thousands of words in
+       * the transcript attributed to the user — so the CLI's fixed opening
+       * line is matched as well.
+       */
       const { result } = renderHook(() => useStreamParser());
 
       result.current.processStreamLine(
@@ -786,7 +792,32 @@ describe("useStreamParser", () => {
             message: {
               role: "user",
               content:
-                "This session is being continued from a previous conversation...",
+                "This session is being continued from a previous conversation that ran out of context...",
+            },
+            session_id: "s1",
+            uuid: generateId(),
+            parent_tool_use_id: null,
+          },
+        }),
+        mockContext,
+      );
+
+      expect(mockContext.addMessage).not.toHaveBeenCalled();
+    });
+
+    it("keeps a message that only mentions the phrase mid-sentence", () => {
+      // Anchored to the start, so quoting it in conversation still shows.
+      const { result } = renderHook(() => useStreamParser());
+
+      result.current.processStreamLine(
+        JSON.stringify({
+          type: "claude_json",
+          data: {
+            type: "user",
+            message: {
+              role: "user",
+              content:
+                'why does "This session is being continued from a previous conversation" appear?',
             },
             session_id: "s1",
             uuid: generateId(),

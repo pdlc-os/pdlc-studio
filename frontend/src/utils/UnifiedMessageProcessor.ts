@@ -8,7 +8,10 @@ import type {
   TimestampedSDKMessage,
 } from "../types";
 import { readContextUsage, type ContextUsage } from "./contextUsage";
-import { readLocalCommandTurn } from "./localCommandTurns";
+import {
+  isCompactionResumePrompt,
+  readLocalCommandTurn,
+} from "./localCommandTurns";
 import type { AgentEvent } from "./agentActivity";
 import { AGENT_TASK_SUBTYPES, toAgentEvent } from "./agentEvents";
 import {
@@ -638,6 +641,10 @@ export class UnifiedMessageProcessor {
     timestamp: number,
     context: ProcessingContext,
   ): void {
+    // The flag is checked on the message itself; this catches the same prompt
+    // arriving over the live stream, where the flag is not carried.
+    if (isCompactionResumePrompt(text)) return;
+
     const turn = readLocalCommandTurn(text);
 
     // Guidance for the model, and acknowledgements of something the
