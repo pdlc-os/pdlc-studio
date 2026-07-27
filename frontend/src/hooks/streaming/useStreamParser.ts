@@ -179,6 +179,11 @@ export function useStreamParser() {
            * Not an SDK message: the turn is blocked in a suspended tool
            * handler, and this card is the only thing that can unblock it.
            */
+          context.addMessage({
+            type: "ask_question",
+            pending: data.question,
+            timestamp: Date.now(),
+          });
           context.onAskQuestion?.(data.question);
         } else if (data.type === "aborted") {
           const abortedMessage: AbortMessage = {

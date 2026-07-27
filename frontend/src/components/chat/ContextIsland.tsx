@@ -48,7 +48,15 @@ export function ContextIsland({
 }: ContextIslandProps) {
   const isCompacting = status === "compacting";
 
-  if (!usage && !isCompacting && runningAgents === 0) return null;
+  /*
+   * Always present once a conversation is open.
+   *
+   * It used to hide until a turn had reported usage, which meant a new session
+   * showed nothing at all and the control appeared to be missing. The window
+   * genuinely has not been measured yet, so the idle state says so with a dash
+   * rather than inventing a 0% — but it occupies its slot, so the composer
+   * does not reflow the moment the first result lands.
+   */
 
   if (isCompacting) {
     return (
@@ -102,7 +110,25 @@ export function ContextIsland({
     );
   }
 
-  const { percent, usedTokens, contextWindow } = usage as ContextUsage;
+  if (!usage) {
+    return (
+      <Tooltip content="Context usage is reported when a turn completes.">
+        <span
+          className="context-island"
+          data-state="idle"
+          data-testid="context-island"
+        >
+          <span className="context-island-meter" aria-hidden="true">
+            <span className="context-island-fill" style={{ inlineSize: 0 }} />
+          </span>
+          <span className="context-island-percent">—</span>
+          <span className="context-island-label">context</span>
+        </span>
+      </Tooltip>
+    );
+  }
+
+  const { percent, usedTokens, contextWindow } = usage;
 
   return (
     <Tooltip

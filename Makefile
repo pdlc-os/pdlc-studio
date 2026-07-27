@@ -1,6 +1,6 @@
 # PDLC Studio - Development Tasks
 
-.PHONY: format format-check lint typecheck test build dev clean install install-frontend install-backend sync-brand
+.PHONY: format format-check lint typecheck test build dev dev-backend-debug clean install install-frontend install-backend sync-brand
 
 # Formatting
 format: format-frontend format-backend
@@ -55,6 +55,11 @@ dev-frontend:
 	cd frontend && npm run dev
 dev-backend:
 	cd backend && deno task dev
+
+# Same, with per-message SDK payload logging. Off by default: every turn logs
+# the full JSON of every message, which buries anything worth reading.
+dev-backend-debug:
+	cd backend && deno task dev:debug
 
 # Quality checks (run before commit)
 check: format-check lint typecheck test build-frontend

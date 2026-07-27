@@ -162,7 +162,24 @@ export type TimestampedSDKMessage =
   | TimestampedSDKSystemMessage
   | TimestampedSDKResultMessage;
 
+/**
+ * A question Claude is blocked on, placed in the transcript.
+ *
+ * It has to be a message rather than something rendered after the list: the
+ * answer arrives as ordinary conversation, so a card appended at the bottom
+ * ends up *below* the reply it preceded — making it read as though Claude
+ * answered before it asked.
+ */
+import type { PendingQuestionPayload as PendingQuestion } from "../../shared/types";
+
+export interface AskQuestionMessage {
+  type: "ask_question";
+  pending: PendingQuestion;
+  timestamp: number;
+}
+
 export type AllMessage =
+  | AskQuestionMessage
   | ChatMessage
   | SystemMessage
   | ToolMessage
@@ -172,6 +189,12 @@ export type AllMessage =
   | TodoMessage;
 
 // Type guard functions
+export function isAskQuestionMessage(
+  message: AllMessage,
+): message is AskQuestionMessage {
+  return message.type === "ask_question";
+}
+
 export function isChatMessage(message: AllMessage): message is ChatMessage {
   return message.type === "chat";
 }

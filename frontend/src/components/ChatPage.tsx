@@ -36,7 +36,6 @@ import { ConversationSidebar } from "./chat/ConversationSidebar";
 import { RenameConversationDialog } from "./chat/RenameConversationDialog";
 import { FilesPanel } from "./chat/FilesPanel";
 import { AgentsPanel } from "./chat/AgentsPanel";
-import { AskUserQuestionCard } from "./chat/AskUserQuestionCard";
 import {
   EMPTY_ACTIVITY,
   reduceAgentActivity,
@@ -1075,26 +1074,9 @@ export function ChatPage() {
                         <ChatMessages
                           messages={messages}
                           isLoading={isLoading}
+                          answeredQuestions={questionAnswers}
+                          onAnswerQuestion={answerQuestion}
                         />
-                        {/*
-                         * Rendered at the end of the transcript, which is
-                         * where it chronologically belongs: the turn is
-                         * blocked in a suspended tool handler, so nothing can
-                         * come after it until this is answered.
-                         */}
-                        {questions.map((question) => (
-                          <AskUserQuestionCard
-                            key={question.questionId}
-                            pending={question}
-                            answered={questionAnswers[question.questionId]}
-                            onAnswer={
-                              questionAnswers[question.questionId]
-                                ? undefined
-                                : (answers) =>
-                                    answerQuestion(question.questionId, answers)
-                            }
-                          />
-                        ))}
                       </div>
                     ) : null}
                   </ChatLayout>

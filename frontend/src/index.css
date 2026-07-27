@@ -1794,3 +1794,36 @@ body,
   text-align: start;
   cursor: pointer;
 }
+
+/*
+ * A colour per permission mode.
+ *
+ * The tag is the only indication of how much latitude Claude has, and four
+ * modes rendered identically made it a label you had to read rather than a
+ * state you could see. Cool variants of each hue so they sit in the composer
+ * without shouting.
+ *
+ * Colour is not the only carrier: the tag text (#YOLO / #Auto / #Plan /
+ * #Classic) still says which mode it is, and the accessible name spells it
+ * out in full.
+ */
+[data-mode="bypassPermissions"] {
+  color: light-dark(#c0392b, #ff6b6b) !important;
+}
+
+[data-mode="acceptEdits"] {
+  color: light-dark(#1f6feb, #58a6ff) !important;
+}
+
+[data-mode="plan"] {
+  color: light-dark(#1a7f5a, #3fdd97) !important;
+}
+
+[data-mode="default"] {
+  color: light-dark(#a06800, #e3b341) !important;
+}
+
+/* Nothing measured yet: present, but visibly holding rather than reporting. */
+.context-island[data-state="idle"] {
+  color: var(--color-text-disabled);
+}

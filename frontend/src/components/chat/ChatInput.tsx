@@ -693,6 +693,7 @@ export function ChatInput({
                 onPermissionModeChange(getNextPermissionMode(permissionMode))
               }
               data-testid="permission-mode-toggle"
+              data-mode={permissionMode}
               label={getPermissionModeIndicator(permissionMode)}
               aria-label={`${getPermissionModeIndicator(permissionMode)} — ${getPermissionModeName(permissionMode)}. Click to cycle (Ctrl+Shift+M)`}
             />
