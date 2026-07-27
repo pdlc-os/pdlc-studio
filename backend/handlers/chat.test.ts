@@ -89,7 +89,7 @@ describe("Chat Handler - Permission Mode Tests", () => {
       );
 
       expect(mockQuery).toHaveBeenCalledWith({
-        prompt: "Test message",
+        prompt: expect.anything(),
         options: expect.objectContaining({
           permissionMode: "plan",
           abortController: expect.any(AbortController),
@@ -130,7 +130,7 @@ describe("Chat Handler - Permission Mode Tests", () => {
       await handleChatRequest(mockContext, requestAbortControllers);
 
       expect(mockQuery).toHaveBeenCalledWith({
-        prompt: "Test message",
+        prompt: expect.anything(),
         options: expect.objectContaining({
           permissionMode: "acceptEdits",
         }),
@@ -164,7 +164,7 @@ describe("Chat Handler - Permission Mode Tests", () => {
       await handleChatRequest(mockContext, requestAbortControllers);
 
       expect(mockQuery).toHaveBeenCalledWith({
-        prompt: "Test message",
+        prompt: expect.anything(),
         options: expect.objectContaining({
           permissionMode: "default",
         }),
@@ -199,7 +199,7 @@ describe("Chat Handler - Permission Mode Tests", () => {
 
       // Permission prompts are off by default — see utils/permissions.ts.
       expect(mockQuery).toHaveBeenCalledWith({
-        prompt: "Test message",
+        prompt: expect.anything(),
         options: expect.objectContaining({
           permissionMode: "bypassPermissions",
         }),
@@ -250,7 +250,7 @@ describe("Chat Handler - Permission Mode Tests", () => {
       await handleChatRequest(mockContext, requestAbortControllers);
 
       expect(mockQuery).toHaveBeenCalledWith({
-        prompt: "Test message with all params",
+        prompt: expect.anything(),
         options: expect.objectContaining({
           permissionMode: "plan",
           resume: "session-123",
@@ -295,7 +295,7 @@ describe("Chat Handler - Permission Mode Tests", () => {
       // The slash reaches the SDK, because it is what marks the prompt as a
       // command rather than a message that happens to read like one.
       expect(mockQuery).toHaveBeenCalledWith({
-        prompt: "/help",
+        prompt: expect.anything(),
         options: expect.objectContaining({
           permissionMode: "plan",
         }),
@@ -329,7 +329,7 @@ describe("Chat Handler - Permission Mode Tests", () => {
       await handleChatRequest(mockContext, requestAbortControllers);
 
       expect(mockQuery).toHaveBeenCalledWith({
-        prompt: "Regular message",
+        prompt: expect.anything(),
         options: expect.objectContaining({
           permissionMode: "acceptEdits",
         }),
@@ -588,5 +588,99 @@ describe("Chat Handler - Permission Mode Tests", () => {
 
       expect(capturedController).toBeInstanceOf(AbortController);
     });
+  });
+});
+
+/**
+ * The messages the streaming-input prompt actually yields.
+ *
+ * The prompt is an async iterable now, not a string, so identity assertions
+ * cannot say anything useful — what matters is the content that reaches the
+ * CLI and the `origin` stamp, which the SDK requires on keyboard input and
+ * which fails *closed* at strict isHuman() gates when absent.
+ */
+async function firstPromptMessage(call: { prompt: unknown }) {
+  const iterator = (call.prompt as AsyncIterable<unknown>)[
+    Symbol.asyncIterator
+  ]();
+  const { value } = await iterator.next();
+  return value;
+}
+
+describe("streaming input", () => {
+  function contextFor(request: {
+    message: string;
+    requestId: string;
+  }): Context {
+    return {
+      req: { json: vi.fn().mockResolvedValue(request) },
+      json: vi.fn((body: unknown, status?: number) => ({ body, status })),
+      var: { config: { cliPath: "/path/to/claude-cli" } },
+    } as unknown as Context;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockQuery.mockReturnValue({
+      [Symbol.asyncIterator]: async function* () {},
+      interrupt: vi.fn(),
+      next: vi.fn(),
+      return: vi.fn(),
+      throw: vi.fn(),
+    } as never);
+  });
+
+  it("sends the message as one user turn, stamped as human", async () => {
+    await handleChatRequest(
+      contextFor({ message: "Test message", requestId: "req-stream" }),
+      new Map(),
+    );
+
+    const first = await firstPromptMessage(mockQuery.mock.calls[0][0]);
+
+    expect(first).toMatchObject({
+      type: "user",
+      message: { role: "user", content: "Test message" },
+      parent_tool_use_id: null,
+      // Absent origin is treated as unattributed and fails closed.
+      origin: { kind: "human" },
+    });
+  });
+
+  it("keeps the slash on a command", async () => {
+    await handleChatRequest(
+      contextFor({ message: "/compact", requestId: "req-slash" }),
+      new Map(),
+    );
+
+    const first = await firstPromptMessage(mockQuery.mock.calls[0][0]);
+
+    expect(first).toMatchObject({
+      message: { role: "user", content: "/compact" },
+    });
+  });
+
+  it("always releases the input stream once the turn ends", async () => {
+    /*
+     * The stream is deliberately parked after the message rather than ended:
+     * measured against a live CLI, an exhausted input stream closes the
+     * control channel with it, and interrupt() then never resolves. commands.ts
+     * parks for the same reason.
+     *
+     * The hazard that creates is a generator left parked forever, which would
+     * hang the query and the HTTP response with it. This asserts the release —
+     * here the turn has already finished, so the stream must be done.
+     */
+    await handleChatRequest(
+      contextFor({ message: "x", requestId: "req-end" }),
+      new Map(),
+    );
+
+    const iterator = (
+      mockQuery.mock.calls[0][0].prompt as AsyncIterable<unknown>
+    )[Symbol.asyncIterator]();
+    await iterator.next();
+
+    expect(await iterator.next()).toEqual({ done: true, value: undefined });
   });
 });

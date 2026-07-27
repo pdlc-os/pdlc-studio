@@ -913,6 +913,39 @@ the action appears by itself if the CLI ever starts recording one. A test
 asserts teammates have no session, which is what should fail first if that
 changes.
 
+## Stopping a turn, and streaming input
+
+The chat handler sends **streaming input** — an async iterable of
+`SDKUserMessage` — rather than a string prompt. The SDK's control requests
+(`interrupt`, `setModel`, `setPermissionMode`, `setMaxThinkingTokens`) are
+documented as _"only supported when streaming input/output is used"_, and a
+string prompt is not.
+
+Three things about it are load-bearing, all found by measurement:
+
+- **`origin: { kind: "human" }` must be stamped explicitly.** The SDK treats an
+  absent origin as unattributed and fails closed at strict `isHuman()` gates.
+- **The generator parks after yielding, instead of returning.** Returning ends
+  the input stream, and the CLI treats end-of-input as the end of the session.
+  `commands.ts` parks for the same reason, so `initializationResult()` — also a
+  control request — can be answered.
+- **The park must be released on the result message _and_ in `finally`.** A
+  generator left parked hangs the query, and the HTTP response with it.
+
+Stop now **interrupts before it kills**. Killing through the AbortController
+throws the turn away; `interrupt()` ends it, so partial work stays in the
+session and the conversation is still resumable. The kill remains as a fallback
+behind a 3s timeout, because a wedged CLI is exactly when someone presses Stop,
+and a tool call in progress can delay the CLI servicing a control request.
+
+**A successful interrupt does not end quietly.** The SDK raises
+`"Claude Code returned an error result: [ede_diagnostic] result_type=user"`,
+indistinguishable from a real failure at the catch site. `interruptedRequests`
+records that the user asked for the stop, so the stream reports `aborted`
+rather than putting an error in the transcript — which would be worse than the
+kill path it replaced. The mark is set _before_ awaiting the interrupt, since
+the turn can raise that error the moment it lands.
+
 ## Conversation Typography
 
 The message transcript has its own typeface and text scale, chosen in Settings →
