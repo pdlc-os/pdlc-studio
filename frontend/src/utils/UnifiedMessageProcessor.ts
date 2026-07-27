@@ -8,7 +8,7 @@ import type {
   TimestampedSDKMessage,
 } from "../types";
 import { readContextUsage, type ContextUsage } from "./contextUsage";
-import { readLocalCommandOutput } from "./localCommandOutput";
+import { readLocalCommandTurn } from "./localCommandTurns";
 import {
   convertSystemMessage,
   convertResultMessage,
@@ -548,6 +548,20 @@ export class UnifiedMessageProcessor {
     context: ProcessingContext,
     options: ProcessingOptions,
   ): AllMessage[] {
+    /*
+     * After compaction the CLI feeds the summary back in as a user turn, so
+     * the model has the history it just discarded. It is machinery, not
+     * speech: the user did not write several thousand words about their own
+     * conversation, and showing it puts the summary in the transcript twice
+     * over — once as the wall of text, once as the conversation it summarises.
+     *
+     * `isCompactSummary` is the CLI's own flag for exactly this, which is
+     * worth far more than matching the English it happens to open with.
+     */
+    if ((message as { isCompactSummary?: boolean }).isCompactSummary === true) {
+      return [];
+    }
+
     const timestamp = options.timestamp || Date.now();
     const messages: AllMessage[] = [];
 
@@ -590,28 +604,30 @@ export class UnifiedMessageProcessor {
   }
 
   /**
-   * Adds a user-role text turn, unless it is a slash command's own output.
+   * Adds a user-role text turn, after unwrapping the CLI's command plumbing.
    *
-   * The CLI reports that output as a user turn wrapped in
-   * `<local-command-stdout>`, which is neither something the user typed nor
-   * meant to be read with its tags on. Acknowledgements ("Compacted") restate
-   * what the transcript already shows and are dropped; anything with real
-   * content is kept, unwrapped, because some commands put their whole answer
-   * there.
+   * Running a slash command emits several user turns of XML that the user
+   * never typed. An invocation becomes the command as typed, so it reads —
+   * and highlights — like one; the caveat aimed at the model is dropped, as
+   * is output that only acknowledges what the transcript already shows.
+   * Output carrying a real answer (/cost and friends) is kept, unwrapped.
    */
   private addUserText(
     text: string,
     timestamp: number,
     context: ProcessingContext,
   ): void {
-    const commandOutput = readLocalCommandOutput(text);
+    const turn = readLocalCommandTurn(text);
 
-    if (commandOutput?.isRedundant) return;
+    // Guidance for the model, and acknowledgements of something the
+    // transcript already shows.
+    if (turn?.kind === "caveat") return;
+    if (turn?.kind === "output" && turn.isRedundant) return;
 
     context.addMessage({
       type: "chat",
       role: "user",
-      content: commandOutput ? commandOutput.text : text,
+      content: turn ? turn.text : text,
       timestamp,
     } satisfies ChatMessage);
   }

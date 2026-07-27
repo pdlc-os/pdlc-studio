@@ -747,6 +747,58 @@ describe("useStreamParser", () => {
       expect(mockContext.addMessage).not.toHaveBeenCalled();
     });
 
+    it("drops the summary the CLI feeds back after compacting", () => {
+      // Several thousand words the user did not write, restating the
+      // conversation they are already looking at.
+      const { result } = renderHook(() => useStreamParser());
+
+      result.current.processStreamLine(
+        JSON.stringify({
+          type: "claude_json",
+          data: {
+            type: "user",
+            isCompactSummary: true,
+            message: {
+              role: "user",
+              content:
+                "This session is being continued from a previous conversation...",
+            },
+            session_id: "s1",
+            uuid: generateId(),
+            parent_tool_use_id: null,
+          },
+        }),
+        mockContext,
+      );
+
+      expect(mockContext.addMessage).not.toHaveBeenCalled();
+    });
+
+    it("keeps an ordinary message that merely looks like a resume prompt", () => {
+      // The flag is the signal, not the prose — a user quoting it still shows.
+      const { result } = renderHook(() => useStreamParser());
+
+      result.current.processStreamLine(
+        JSON.stringify({
+          type: "claude_json",
+          data: {
+            type: "user",
+            message: {
+              role: "user",
+              content:
+                "This session is being continued from a previous conversation...",
+            },
+            session_id: "s1",
+            uuid: generateId(),
+            parent_tool_use_id: null,
+          },
+        }),
+        mockContext,
+      );
+
+      expect(mockContext.addMessage).toHaveBeenCalled();
+    });
+
     it("keeps command output that says something, without its wrapper", () => {
       const { result } = renderHook(() => useStreamParser());
 
