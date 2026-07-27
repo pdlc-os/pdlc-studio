@@ -286,6 +286,7 @@ jobs:
           path: ./artifacts
 
       - name: Upload release assets
+        id: draft
         uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836 # v2.3.3
         with:
           # Required on the manual path: github.ref is a branch there, so the
@@ -297,13 +298,49 @@ jobs:
           draft: true
           prerelease: false
 
+      # Publishes by release *id*, not by tag.
+      #
+      # The previous step deliberately creates a draft so a half-uploaded
+      # release is never visible. But a draft has no tag ref — GitHub files it
+      # under `untagged-<hash>` until it is published — so a second
+      # action-gh-release keyed on `tag_name` may not find it and creates a
+      # *second* release instead. That is exactly what happened on 1.1.0: the
+      # assets stayed in the invisible draft while users saw a published
+      # release with nothing to download. It worked on 1.0.0, so the lookup is
+      # racy rather than reliably wrong.
+      #
+      # The id from the upload step is unambiguous, so this cannot happen.
       - name: Publish release
-        uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836 # v2.3.3
-        with:
-          tag_name: ${{ needs.prepare.outputs.tag || github.ref_name }}
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.draft.outputs.id }}
+          TAG: ${{ needs.prepare.outputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${RELEASE_ID}" ]; then
+            echo "::error::upload step reported no release id; refusing to guess"
+            exit 1
+          fi
+
+          # PATCH does not generate notes, so ask for them explicitly.
+          notes=$(gh api -X POST "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+            -f tag_name="${TAG}" --jq .body)
+
+          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+            -F draft=false \
+            -f tag_name="${TAG}" \
+            -f name="${TAG}" \
+            -f body="${notes}" \
+            --jq '"published \(.tag_name) with \(.assets | length) assets"'
+
+          # A release with no binaries is the failure this step exists to
+          # prevent, so fail loudly rather than leaving one published.
+          count=$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" --jq '.assets | length')
+          if [ "${count}" -lt 4 ]; then
+            echo "::error::published release has ${count} assets, expected at least 4"
+            exit 1
+          fi
 
   npm-publish:
     needs: [prepare, build]
