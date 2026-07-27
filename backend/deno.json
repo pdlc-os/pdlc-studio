@@ -14,7 +14,7 @@
   "tasks": {
     "generate-version": "node scripts/generate-version.js",
     "copy-frontend": "node scripts/copy-frontend.js",
-    "dev": "deno task generate-version && deno run --allow-net --allow-run --allow-read --allow-write --allow-env --allow-sys --watch cli/deno.ts --debug",
+    "dev": "deno task generate-version && deno run --allow-net --allow-run --allow-read --allow-write --allow-env --allow-sys --env-file=../.env --watch cli/deno.ts --debug",
     "build": "deno task generate-version && deno task copy-frontend && deno compile --allow-net --allow-run --allow-read --allow-write --allow-env --allow-sys --include ./dist/static --output ../dist/pdlc-studio cli/deno.ts",
     "format": "deno fmt cli/deno.ts runtime/deno.ts",
     "format:check": "deno fmt --check cli/deno.ts runtime/deno.ts",
